@@ -271,6 +271,19 @@ global_variable global_variable_alloc( bulk_info  *z_b ){
 	gv.EM_database  		=  0; 					
 	gv.n_points 			=  1;
 	gv.solver   			=  2;					/* 0 -> Legacy, 1 = PGE, Hybrid PGE/LP */
+	gv.ss_solver 			=  0;
+	gv.ns_alpha 			=  1e-4;
+	gv.ns_beta_ini 			=  0.25;
+	gv.ns_beta 				=  0.25;
+	gv.ns_tol 				=  1e-6;
+	gv.ns_tol_pg 			=  1e-4;
+	gv.ns_eps 				=  2e-10;
+	gv.ns_eps_bnd 			=  1e-10;
+	gv.ns_frac_bnd 			=  0.9;
+	gv.ns_omax 				=  128;
+	gv.ns_imax 				=  512;
+	gv.ns_max_ite 			=  4096;
+	gv.ns_gn_max 			=  4;
 	gv.DEW_solve_algorithm 	=  4;              		/** 0: original plain Picard DEW inner solver, 1: damped/mixed variant, 2: plain Picard + Newton-safeguarded-by-bisection mu_Hp solve, 4 (default): Newton on ln(molality) of all species with activity coefficients inside the residual - see DEW_aq_solver.c */
 	gv.warm_start			=  1;					/** 1 (default): DEW outer-PGE warm start active, 0: disabled (always re-explore the full 8-start multistart grid) - see NLopt_opt_DEW_function */
 	gv.leveling_mode		=  0;

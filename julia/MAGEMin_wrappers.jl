@@ -1476,7 +1476,7 @@ function exclude_DEW_species(  dtb     :: String,
 end
 
 """
-    Initialize_MAGEMin(db="ig"; verbose=0, dataset=nothing, limitCaOpx=0, CaOpxLim=0.0, mbCpx=1, mbIlm=0, mpSp=0, mpIlm=0, ig_ed=0, buffer="NONE", solver=0)
+    Initialize_MAGEMin(db="ig"; verbose=0, dataset=nothing, limitCaOpx=0, CaOpxLim=0.0, mbCpx=1, mbIlm=0, mpSp=0, mpIlm=0, ig_ed=0, buffer="NONE", solver=0, optimizer=0)
 
     Initialize MAGEMin on one or more threads for the specified database.
 
@@ -1513,6 +1513,12 @@ end
         i.e. off).
     solver : Int64, optional
         Solver type (default: 0).
+    optimizer : Int64, optional
+        Local optimizer of the solution phases, used by the legacy solver (`solver=0`) for the
+        THERMOCALC and Stixrude & Lithgow-Bertelloni databases: 0 NLopt (default), 1 nullspace
+        minimization with NLopt fallback.
+        With 1, oxides set exactly to zero in the bulk are removed from the system, including
+        the core oxides that are otherwise raised to 1e-4 (reduced systems below FMAS).
 
     Returns
     -------
@@ -1531,6 +1537,7 @@ function Initialize_MAGEMin(db = "ig";  verbose     ::Union{Int64,Bool} = 0,
                                         buffer      ::String            = "NONE",
                                         mu_fix_idx  ::Vector{String}    = String[],
                                         solver      ::Int64             = 0,
+                                        optimizer   ::Int64             = 0,
                                         seismicScheme :: String         = "VRH",
                                         seismicWeightFactor :: Float64    = 0.5)
 
@@ -1561,6 +1568,7 @@ function Initialize_MAGEMin(db = "ig";  verbose     ::Union{Int64,Bool} = 0,
                                                     buffer      = buffer,
                                                     mu_fix_idx  = mu_fix_idx,
                                                     solver      = solver,
+                                                    optimizer   = optimizer,
                                                     seismicScheme = seismicScheme,
                                                     seismicWeightFactor = seismicWeightFactor );
 
@@ -1597,7 +1605,7 @@ end
 
 
 """
-    init_MAGEMin(db="ig"; verbose=0, dataset=nothing, mbCpx=0, mbIlm=0, mpSp=0, mpIlm=0, ig_ed=0, limitCaOpx=0, CaOpxLim=1.0, buffer="NONE", solver=0)
+    init_MAGEMin(db="ig"; verbose=0, dataset=nothing, mbCpx=0, mbIlm=0, mpSp=0, mpIlm=0, ig_ed=0, limitCaOpx=0, CaOpxLim=1.0, buffer="NONE", solver=0, optimizer=0)
 
     Initialize MAGEMin (including setting global options) and load the database for a single thread.
 
@@ -1639,6 +1647,12 @@ end
         i.e. off).
     solver : Int64, optional
         Solver type (default: 0).
+    optimizer : Int64, optional
+        Local optimizer of the solution phases, used by the legacy solver (`solver=0`) for the
+        THERMOCALC and Stixrude & Lithgow-Bertelloni databases: 0 NLopt (default), 1 nullspace
+        minimization with NLopt fallback.
+        With 1, oxides set exactly to zero in the bulk are removed from the system, including
+        the core oxides that are otherwise raised to 1e-4 (reduced systems below FMAS).
 
     Returns
     -------
@@ -1664,6 +1678,7 @@ function  init_MAGEMin( db          :: String               =  "ig";
                         buffer      :: String               =  "NONE",
                         mu_fix_idx  :: Vector{String}        =  String[],
                         solver      :: Int64                =   0,
+                        optimizer   :: Int64                =   0,
                         seismicScheme :: String             =  "VRH",
                         seismicWeightFactor :: Float64      = 0.5 )
 
@@ -1695,7 +1710,9 @@ function  init_MAGEMin( db          :: String               =  "ig";
 
     gv.limitCaOpx   = limitCaOpx
     gv.CaOpxLim     = CaOpxLim
+    optimizer in (0, 1) || error("optimizer must be 0 (NLopt) or 1 (nullspace), got $optimizer")
     gv.solver       = solver
+    gv.ss_solver    = optimizer
     gv.seismicScheme        = seismicScheme == "VRH" ? 0 : 1
     gv.seismicWeightFactor  = seismicWeightFactor
 
@@ -2565,7 +2582,8 @@ end
 """
 function define_bulk_rock(gv, bulk_in, bulk_in_ox, sys_in,db)
 
-    bulk_rock, ox   = convertBulk4MAGEMin(bulk_in,bulk_in_ox,sys_in,db)     # conversion changes the system unit to mol
+    ns_reduced      = is_db(db) && (get_db(db).research_group == "sb" || (gv.ss_solver == 1 && gv.solver == 0 && get_db(db).research_group == "tc"))
+    bulk_rock, ox   = convertBulk4MAGEMin(bulk_in,bulk_in_ox,sys_in,db; ns_reduced = ns_reduced)     # conversion changes the system unit to mol
     unsafe_copyto!(gv.bulk_rock, pointer(bulk_rock), gv.len_ox)            # copy the bulk-rock
 
     LibMAGEMin.norm_array(gv.bulk_rock, gv.len_ox)
@@ -2682,6 +2700,7 @@ function FeO2Fe_O!(    bulk_mol     :: AbstractVector{Float64},
         bulk_ox[tmp_idFeO]  = "Fe"; bulk_ox[tmp_idFe2O3]  = "O"
     elseif ("FeO" in bulk_ox && !("O" in bulk_ox)) # If only FeO is present, assume excess oxygen to be zero
         push!(bulk_ox, "O"); push!(bulk_mol, 0.0);
+    elseif !("FeO" in bulk_ox)
     else # Recompute FeO + O -> Fe + O (negative O for reduced systems, positive for oxidized systems)
         tmp_idFeO, tmp_idO  = findfirst(bulk_ox .== "FeO"), findfirst(bulk_ox .== "O")
         XFe2O3 = bulk_mol[tmp_idO]; XFeO = bulk_mol[tmp_idFeO] - 2XFe2O3
@@ -2729,6 +2748,12 @@ end
         Input system units, "mol" or "wt".
     db : String
         Database identifier, e.g. "ig", "mp", "mb", "sb24".
+    oxMinGuard : Bool, optional
+        Set non-core oxides below 2e-5 to zero (default: true).
+    ns_reduced : Bool, optional
+        Reduced system (SB databases, or THERMOCALC with the nullspace optimizer: `optimizer=1`,
+        `solver=0`): core oxides set exactly to zero (or below 2e-5 with `oxMinGuard`) stay zero
+        instead of being raised to 1e-4 (default: false).
 
     Returns
     -------
@@ -2741,7 +2766,8 @@ function convertBulk4MAGEMin(   bulk_in     :: T1,
                                 bulk_in_ox  :: Vector{String},
                                 sys_in      :: String,
                                 db          :: String;
-                                oxMinGuard  ::  Bool = true ) where {T1 <: AbstractVector{Float64}}
+                                oxMinGuard  ::  Bool = true,
+                                ns_reduced  ::  Bool = false ) where {T1 <: AbstractVector{Float64}}
 
     bulk_in = normalize(bulk_in);
 
@@ -2799,43 +2825,16 @@ function convertBulk4MAGEMin(   bulk_in     :: T1,
 
     MAGEMin_bulk .= normalize(MAGEMin_bulk);
 
-    # Define core and optional oxides for each database
+    idx_FeO_ox  = findfirst(isequal("FeO"), MAGEMin_ox)
+    idx_O_ox    = findfirst(isequal("O"),   MAGEMin_ox)
+    if !isnothing(idx_FeO_ox) && !isnothing(idx_O_ox) && MAGEMin_bulk[idx_O_ox] > 0.0 && MAGEMin_bulk[idx_FeO_ox] < (oxMinGuard ? 2e-5 : eps(Float64))
+        @warn "FeO is absent from the bulk-rock composition: O (ferric iron) is set to 0.0" maxlog=1
+        MAGEMin_bulk[idx_O_ox] = 0.0
+        MAGEMin_bulk .= normalize(MAGEMin_bulk)
+    end
+
+    # Core oxides of the THERMOCALC databases come from the C library (is_core_oxide), the others are defined here
     oxide_config = Dict(
-
-        #= THERMOCALC databases =#
-        "mb"   => (core=["SiO2", "Al2O3","MgO", "FeO"],
-                   optional=["CaO", "K2O", "Na2O", "H2O", "TiO2", "O"]),
-
-        "mp"   => (core=["SiO2", "Al2O3", "MgO", "FeO"],  
-                   optional=["CaO", "K2O", "Na2O", "TiO2", "O", "MnO", "H2O"]),
-
-        "ig"   => (core=["SiO2", "Al2O3", "MgO", "FeO"],
-                   optional=["CaO", "Na2O", "K2O", "Cr2O3", "TiO2", "O", "H2O"]),
-
-        "igad" => (core=["SiO2", "Al2O3", "MgO", "FeO"],
-                   optional=["CaO", "K2O", "Na2O", "Cr2O3", "TiO2", "O"]),
-
-        "igd" => (core=["SiO2", "Al2O3", "MgO", "FeO"],
-                   optional=["CaO", "K2O", "Na2O", "Cr2O3", "TiO2", "O",]),
-
-        "mtl"   => (core=["SiO2", "Al2O3","MgO", "FeO"],
-                   optional=[ "CaO", "Na2O"]),
-
-        "um"   => (core=["SiO2", "Al2O3", "MgO", "FeO"],
-                   optional=["S", "O", "H2O"]),
-
-        #= extended database =#
-        "mbe"  => (core=["SiO2", "Al2O3", "MgO", "FeO"],
-                   optional=["TiO2", "O", "K2O", "Na2O", "H2O"]),
-
-        "mpe"  => (core=["SiO2", "Al2O3", "MgO", "FeO"],
-                   optional=["CaO", "CO2", "S", "TiO2", "O", "MnO", "H2O", "K2O", "Na2O"]),
-
-        "ume"  => (core=["SiO2", "MgO", "FeO"],
-                   optional=["Al2O3", "S", "O", "Cr2O3", "CO2", "H2O", "Na2O", "CaO"]),
-
-        "all"  => (core=["SiO2", "Al2O3", "MgO", "FeO"],
-                   optional=["CaO", "K2O", "Na2O", "TiO2", "O", "MnO", "Cr2O3", "H2O", "CO2", "S"]),
 
         #= Stixrude & Lithgow-Bertelloni databases =#
         "sb11"   => (core=["SiO2", "Al2O3", "FeO", "MgO"],
@@ -2864,12 +2863,26 @@ function convertBulk4MAGEMin(   bulk_in     :: T1,
     )
 
     # Get core and optional indices for current database
-    config  = get(oxide_config, db, (core=1:length(MAGEMin_ox), optional=Int64[]))
-    c       = findall(in(config.core).(MAGEMin_ox))
-    d       = findall(in(config.optional).(MAGEMin_ox))
+    if is_db(db) && get_db(db).research_group == "tc"
+        EM_db   = get_db(db).EM_database
+        c       = findall(ox -> LibMAGEMin.is_core_oxide("tc", EM_db, ox) == 1, MAGEMin_ox)
+        d       = setdiff(eachindex(MAGEMin_ox), c)
+    else
+        config  = get(oxide_config, db, (core=MAGEMin_ox, optional=String[]))
+        c       = findall(in(config.core).(MAGEMin_ox))
+        d       = findall(in(config.optional).(MAGEMin_ox))
+    end
 
-    # Set core oxides to minimum 1e-4 if below threshold
-    id0 = findall(MAGEMin_bulk[c] .< 1e-4)
+    # Set core oxides to minimum 1e-4 if below threshold (exact zeros are kept when the nullspace optimizer reduces the system)
+    if ns_reduced
+        if oxMinGuard
+            idz = findall(MAGEMin_bulk[c] .< 2e-5)
+            MAGEMin_bulk[c[idz]] .= 0.0
+        end
+        id0 = findall(0.0 .< MAGEMin_bulk[c] .< 1e-4)
+    else
+        id0 = findall(MAGEMin_bulk[c] .< 1e-4)
+    end
     if ~isempty(id0)
         MAGEMin_bulk[c[id0]] .= 1e-4;
     end
@@ -3285,6 +3298,12 @@ function point_wise_minimization(   P       ::Float64,
                 tot_pc      = unsafe_wrap(Vector{Cint},SS_ref_db[ph_id].tot_pc, 1)
                 id_pc       = unsafe_wrap(Vector{Cint},SS_ref_db[ph_id].id_pc, 1)
 
+                xeos        = copy(Gi[i].xeos_Ppc)
+                ns_pc       = rg in ("tc", "sb") ? LibMAGEMin.ns_pc_mode(gv, pointer(SS_ref_db, ph_id)) : 0
+                if ns_pc == 2 || (ns_pc == 1 && LibMAGEMin.ns_project_x(gv, pointer(SS_ref_db, ph_id), xeos) == 0)
+                    continue
+                end
+
                 if tot_pc[1] < n_SS_PC[ph_id]   # here we make sure we have the space to store the pseudocompound
 
                     m_pc        = id_pc[1]+1;
@@ -3298,7 +3317,6 @@ function point_wise_minimization(   P       ::Float64,
                     ptr_xeos_pc = unsafe_wrap(Vector{Ptr{Cdouble}},SS_ref_db[ph_id].xeos_pc,SS_ref_db[ph_id].n_pc)
         
                     unsafe_copyto!(SS_ref_db[ph_id].gb_lvl,SS_ref_db[ph_id].gbase, SS_ref_db[ph_id].n_em)
-                    xeos        = Gi[i].xeos_Ppc
         
                     # get solution phase information for given compositional variables
                     unsafe_copyto!(SS_ref_db[ph_id].iguess,pointer(xeos), n_xeos)
@@ -4668,7 +4686,11 @@ function point_wise_minimization_with_guess(    mSS_vec ::  Vector{LibMAGEMin.mS
                 ptr_xeos_pc = unsafe_wrap(Vector{Ptr{Cdouble}},SS_ref_db[ph_id].xeos_pc,SS_ref_db[ph_id].n_pc)
 
                 unsafe_copyto!(SS_ref_db[ph_id].gb_lvl,SS_ref_db[ph_id].gbase, SS_ref_db[ph_id].n_em)
-                xeos        = mSS_vec[i].xeos_Ppc
+                xeos        = copy(mSS_vec[i].xeos_Ppc)
+                ns_pc       = rg in ("tc", "sb") ? LibMAGEMin.ns_pc_mode(gv, pointer(SS_ref_db, ph_id)) : 0
+                if ns_pc == 2 || (ns_pc == 1 && LibMAGEMin.ns_project_x(gv, pointer(SS_ref_db, ph_id), xeos) == 0)
+                    continue
+                end
 
                 # retrieve bounds
                 bounds_ref      = zeros( n_xeos,2)

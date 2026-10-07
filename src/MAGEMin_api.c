@@ -115,6 +115,22 @@ int MAGEMin_SetSolver(			MAGEMin_Handle *h,
 	return 0;
 }
 
+int MAGEMin_SetSSSolver(		MAGEMin_Handle *h,
+								int             ss_solver		){
+
+	if (h == NULL || ss_solver < 0 || ss_solver > 2){
+		printf(" MAGEMin_SetSSSolver error: ss_solver must be 0, 1 or 2\n");
+		return -1;
+	}
+
+	h->gv.ss_solver = ss_solver;
+
+	if (strcmp(h->gv.research_group,"tc") != 0 && strcmp(h->gv.research_group,"sb") != 0){
+		return ss_solver == 0 ? 0 : 1;
+	}
+	return 0;
+}
+
 int MAGEMin_SetBuffer(			MAGEMin_Handle *h,
 								const char     *buffer,
 								double          buffer_n		){

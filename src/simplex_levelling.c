@@ -645,6 +645,9 @@ void generate_pseudocompounds(	int 		 		 ss,
 
 	int rg_br_gh = (strcmp(gv.research_group, "br") == 0 || strcmp(gv.research_group, "gh") == 0);
 	int rg_sb    = (strcmp(gv.research_group, "sb") == 0);
+	int ns_pc    = (strcmp(gv.research_group, "tc") == 0 || strcmp(gv.research_group, "sb") == 0) ? ns_pc_mode(gv, &SS_ref_db[ss]) : 0;
+
+	if (ns_pc == 2){ return; }
 	int rg_gh    = (strcmp(gv.research_group, "gh") == 0);
 	int n_pv     = (SS_ref_db[ss].n_xeos > SS_ref_db[ss].n_em) ? SS_ref_db[ss].n_xeos : SS_ref_db[ss].n_em;
 
@@ -653,7 +656,7 @@ void generate_pseudocompounds(	int 		 		 ss,
 			get_ss_pv.xeos_pc[i] = SS_pc_xeos[ss].ss_pc_xeos[k].xeos_pc[i];
 		}
 
-		if (rg_br_gh){
+		if (rg_br_gh || rg_sb){
 			double pc_sum = 0.0;
 			for (int i = 0; i < SS_ref_db[ss].n_xeos; i++){
 				if (SS_ref_db[ss].z_em[i] == 0.0){
@@ -677,6 +680,7 @@ void generate_pseudocompounds(	int 		 		 ss,
 				get_ss_pv.xeos_pc[i] = SS_ref_db[ss].bounds_ref[i][0];
 			}
 		}
+		if (ns_pc == 1 && !ns_project_x(gv, &SS_ref_db[ss], get_ss_pv.xeos_pc)){ continue; }
 
 		G 	= (*SS_objective[ss])(SS_ref_db[ss].n_xeos, get_ss_pv.xeos_pc, 	NULL, &SS_ref_db[ss]);
 

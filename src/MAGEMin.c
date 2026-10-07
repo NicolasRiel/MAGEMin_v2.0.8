@@ -57,6 +57,7 @@
 #include "phase_update_function.h"
 #include "all_solution_phases.h"
 #include "MAGEMin.h"
+#include "TC_database/NS_opt_function.h"
 
 /** 
   Main routine
@@ -885,6 +886,7 @@ global_variable ReadCommandLineOptions(	global_variable 	 gv,
 		{ "n_mu_fix",   ko_optional_argument, 335 },
 		{ "mu_fix_idx", ko_optional_argument, 336 },
 		{ "mu_fix_val", ko_optional_argument, 337 },
+		{ "ss_solver",  ko_optional_argument, 338 },
     	{ NULL, 0, 0 }
 	};
 	ketopt_t opt = KETOPT_INIT;
@@ -924,7 +926,8 @@ global_variable ReadCommandLineOptions(	global_variable 	 gv,
 					p = strtok(NULL, ",");
 			}
 		}
-		else if (c == 316){ gv.solver   		= atoi(opt.arg);			}																		
+		else if (c == 316){ gv.solver   		= atoi(opt.arg);			}
+		else if (c == 338){ gv.ss_solver   		= atoi(opt.arg);			}																		
 		else if (c == 318){ gv.output_matlab   	= atoi(opt.arg); 			}																		
 		else if (c == 304){ gv.n_points 		= atoi(opt.arg); 	 		}
 		else if (c == 305){ gv.test  			= atoi(opt.arg); 			}
@@ -1149,6 +1152,7 @@ global_variable SetupDatabase(			global_variable 	 gv,
 		printf("--buffer_n    : buffer_n             = %f \n", 				gv.buffer_n			);
 
 		printf("--solver      : solver               = %i \n", 	 	   		gv.solver			);
+		printf("--ss_solver   : ss_solver            = %i \n", 	 	   		gv.ss_solver		);
 
 		printf("--limitCaOpx  : limitCaOpx           = %i \n", 	 	   		gv.limitCaOpx		);
 		printf("--CaOpxLim    : CaOpxLim             = %f \n", 	 	   		gv.CaOpxLim			);
@@ -1208,6 +1212,15 @@ Databases InitializeDatabases(	global_variable gv,
 														DB.SS_ref_db[iss],
 														gv.SS_list[iss], 
 														gv						);
+	}
+
+	if (strcmp(gv.research_group, "tc") == 0){
+		TC_NS_init(										gv,
+														DB.SS_ref_db			);
+	}
+	else if (strcmp(gv.research_group, "sb") == 0){
+		SB_NS_init(										gv,
+														DB.SS_ref_db			);
 	}
 
 	/* Allocate memory of the considered set of phases 								*/
@@ -1382,6 +1395,8 @@ void FreeDatabases(		global_variable gv,
 		n_em 	= DB.SS_ref_db[i].n_em;
 		n_sf 	= DB.SS_ref_db[i].n_sf;
 		n_xeos 	= DB.SS_ref_db[i].n_xeos;
+
+		NS_free(&DB.SS_ref_db[i]);
 
 		if (DB.SS_ref_db[i].n_cat > 0){
 			n_cat = DB.SS_ref_db[i].n_cat;

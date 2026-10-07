@@ -156,7 +156,7 @@ void reset_output_struct(		global_variable 	 gv,
 	sp[0].system_oxygen			 = 0.0;
 	sp[0].Fe3_Fe2_ratio			 = 0.0;
 
-	if (gv.O_id != -1 && z_b.bulk_rock[gv.O_id] != 0.0){
+	if (gv.O_id != -1 && gv.FeO_id != -1 && z_b.bulk_rock[gv.O_id] != 0.0){
 		double buffer_mol    = 0.0;
 		int    buffer_active = 0;
 		for (int ii = 0; ii < gv.len_pp; ii++){

@@ -84,6 +84,19 @@ typedef struct global_variables {
 	int 	 leveling_mode;
 	int      status;			/** status of the minimization 		*/
 	int      solver;
+	int      ss_solver;
+	double   ns_alpha;
+	double   ns_beta_ini;
+	double   ns_beta;
+	double   ns_tol;
+	double   ns_tol_pg;
+	double   ns_eps;
+	double   ns_eps_bnd;
+	double   ns_frac_bnd;
+	int      ns_omax;
+	int      ns_imax;
+	int      ns_max_ite;
+	int      ns_gn_max;
 	double   solver_switch_T;
 	int 	 seismicScheme; 	/** 0: Voigt-Reuss-Hill, 1: Hashin-Shtrikman */
 	double   seismicWeightFactor; 	/** value between 0 and 1 to blend VRH and HS bounds for seismic properties calculation. 0 = pure VRH, 1 = pure HS, values in between = linear blend. When a fluid phase is present, G_min = 0, so HS- shear bound = 0 (handled by IEEE 754). */
@@ -379,6 +392,9 @@ typedef double (*obj_type) (		unsigned  		 n,
 									double 			*grad,
 									void 			*SS_ref_db			);
 
+typedef void (*ns_p2x_type) (		void 			*SS_ref_db,
+									double 			 eps				);
+
 typedef struct simplex_datas
 {
 	/* global variables */
@@ -579,6 +595,59 @@ typedef struct SS_refs {
 
 	int      EM_database;		/** gv.EM_database of the owning instance (gh: 0=xMELTS, 1=rMELTS, 2=pMELTS) */
 	int      gh_multistart_order;	/** gv.gh_multistart_order of the owning instance 		*/
+
+	int          ns_ok;
+	int          ns_ok_init;
+	int          ns_mode;
+	int          ns_nc;
+	int          ns_fd;
+	int          ns_absent;
+	int          ns_n_dir0;
+	int          ns_n_dir;
+	int          ns_n_C;
+	int          ns_n_em_act;
+	int          ns_lwork;
+	int          ns_ite;
+	int          ns_status;
+	obj_type     ns_obj;
+	ns_p2x_type  ns_p2x;
+	double     **ns_V;
+	double     **ns_M;
+	double     **ns_N0;
+	double     **ns_N;
+	double     **ns_BkI;
+	double      *ns_sf0;
+	double      *ns_sfc;
+	double      *ns_sf;
+	double      *ns_sf_prev;
+	double      *ns_trial;
+	double      *ns_g;
+	double      *ns_pg0;
+	double      *ns_pg1;
+	double      *ns_pk;
+	double      *ns_sk;
+	double      *ns_yk;
+	double      *ns_vt;
+	double      *ns_r;
+	double      *ns_x;
+	double      *ns_x0;
+	double      *ns_w;
+	double      *ns_pt;
+	double      *ns_sft;
+	double      *ns_gb;
+	double      *ns_bsave;
+	double      *ns_ub;
+	double      *ns_S;
+	double      *ns_P;
+	double      *ns_z;
+	double      *ns_svdA;
+	double      *ns_svdS;
+	double      *ns_svdU;
+	double      *ns_svdVt;
+	double      *ns_work;
+	int         *ns_sf_state;
+	int         *ns_C;
+	int         *ns_em_act;
 
 } SS_ref;
 

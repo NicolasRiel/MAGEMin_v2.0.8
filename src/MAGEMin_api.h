@@ -60,6 +60,9 @@ MAGEMin_Handle *MAGEMin_Init(	const char *database,
 int MAGEMin_SetSolver(			MAGEMin_Handle *h,
 								int             solver			);
 
+int MAGEMin_SetSSSolver(		MAGEMin_Handle *h,
+								int             ss_solver		);
+
 /**
  * Set (or clear) the oxygen buffer / fixed-activity constraint (CLI --buffer,
  * --buffer_n). Persists across MAGEMin_ComputeEquilibrium calls until changed.

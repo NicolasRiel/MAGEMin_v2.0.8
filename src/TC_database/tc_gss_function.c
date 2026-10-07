@@ -18879,6 +18879,9 @@ SS_ref G_SS_mb_ext_EM_function(		global_variable 	 gv,
 			}
             SS_ref_db  = G_SS_mb_chl_function(SS_ref_db, gv.research_group, EM_dataset, gv.len_ox, z_b, eps);	}
         else if (strcmp( name, "oamp") == 0 ){
+			if (z_b.bulk_rock[gv.H2O_id] == 0.){
+				SS_ref_db.ss_flags[0]  = 0;
+			}
             SS_ref_db  = G_SS_mb_oamp_function(SS_ref_db, gv.research_group, EM_dataset, gv.len_ox, z_b, eps);	}
         else if (strcmp( name, "ta") == 0 ){
 			/* talc is unconditionally hydrous (structural OH on every endmember: ta/fta/ota/

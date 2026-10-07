@@ -215,15 +215,14 @@ global_variable PGE_residual_update(			bulk_info 				z_b,
 		}
 	}
 
-	if (gv.BR_rel_norm){
-		gv.BR_norm    = relative_norm_vector(	gv.mass_residual,
-												z_b.bulk_rock,
-												z_b.nzEl_val				);
+	double br_norm = 0.0;
+	for (int v = 0; v < z_b.nzEl_val; v++){
+		int    j = z_b.nzEl_array[v];
+		double r = gv.mass_residual[j];
+		if (gv.BR_rel_norm && fabs(z_b.bulk_rock[j]) > 1e-8){ r /= fabs(z_b.bulk_rock[j]); }
+		br_norm += r*r;
 	}
-	else{
-		gv.BR_norm    = norm_vector(	gv.mass_residual,
-										z_b.nzEl_val				);
-	}
+	gv.BR_norm = sqrt(br_norm);
 
 	/* Calculate G-system */
 	gv.G_system = 0.0;
@@ -1740,7 +1739,7 @@ global_variable LP(		bulk_info 			z_b,
 			}
 
 			for (int i = 0; i < z_b.nzEl_val; i++){
-				if (gv.gam_tot[z_b.nzEl_array[i]] >= 0.0){ gv.status = -1; }
+				if (gv.gam_tot[z_b.nzEl_array[i]] >= 0.0 && strcmp(gv.ox[z_b.nzEl_array[i]], "Fe") != 0){ gv.status = -1; }
 			}
 
 		}
