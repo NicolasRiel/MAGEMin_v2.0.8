@@ -284,6 +284,13 @@ global_variable global_variable_alloc( bulk_info  *z_b ){
 	gv.ns_imax 				=  512;
 	gv.ns_max_ite 			=  4096;
 	gv.ns_gn_max 			=  4;
+	gv.final_Newton_step 	=  1;
+	gv.fn_status 			=  0;
+	gv.fn_ite 				=  0;
+	gv.fn_nz_max 			=  0;
+	gv.fn_A 				=  NULL;
+	gv.fn_b 				=  NULL;
+	gv.fn_ipiv 				=  NULL;
 	gv.DEW_solve_algorithm 	=  4;              		/** 0: original plain Picard DEW inner solver, 1: damped/mixed variant, 2: plain Picard + Newton-safeguarded-by-bisection mu_Hp solve, 4 (default): Newton on ln(molality) of all species with activity coefficients inside the residual - see DEW_aq_solver.c */
 	gv.warm_start			=  1;					/** 1 (default): DEW outer-PGE warm start active, 0: disabled (always re-explore the full 8-start multistart grid) - see NLopt_opt_DEW_function */
 	gv.leveling_mode		=  0;

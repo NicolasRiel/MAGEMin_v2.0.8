@@ -131,6 +131,22 @@ int MAGEMin_SetSSSolver(		MAGEMin_Handle *h,
 	return 0;
 }
 
+int MAGEMin_SetFinalNewtonStep(	MAGEMin_Handle *h,
+								int             final_Newton_step	){
+
+	if (h == NULL || final_Newton_step < 0 || final_Newton_step > 1){
+		printf(" MAGEMin_SetFinalNewtonStep error: final_Newton_step must be 0 or 1\n");
+		return -1;
+	}
+
+	h->gv.final_Newton_step = final_Newton_step;
+
+	if (strcmp(h->gv.research_group,"tc") != 0 && strcmp(h->gv.research_group,"sb") != 0){
+		return final_Newton_step == 0 ? 0 : 1;
+	}
+	return 0;
+}
+
 int MAGEMin_SetBuffer(			MAGEMin_Handle *h,
 								const char     *buffer,
 								double          buffer_n		){

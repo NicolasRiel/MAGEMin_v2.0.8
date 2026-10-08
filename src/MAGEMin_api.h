@@ -64,6 +64,16 @@ int MAGEMin_SetSSSolver(		MAGEMin_Handle *h,
 								int             ss_solver		);
 
 /**
+ * Newton polish of the converged assemblage (CLI --final_Newton_step): 1 = active
+ * (default), 0 = inactive. Applies to the "tc" and "sb" research groups.
+ *
+ * Returns 0 on success, 1 if the request has no effect for the database's
+ * research group, -1 on an invalid value.
+ */
+int MAGEMin_SetFinalNewtonStep(	MAGEMin_Handle *h,
+								int             final_Newton_step	);
+
+/**
  * Set (or clear) the oxygen buffer / fixed-activity constraint (CLI --buffer,
  * --buffer_n). Persists across MAGEMin_ComputeEquilibrium calls until changed.
  *

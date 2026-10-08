@@ -795,6 +795,13 @@ static void warn_ds62_placeholder_phases(	global_variable 	 gv,
 		printf("  Wrong solver option: should be 0 (legacy) or 1 (PGE & legacy)");
 	}
 
+	gv = final_Newton(					z_b,
+										gv,
+										PC_read,
+										PP_ref_db,
+										SS_ref_db,
+										cp						);
+
 	if (gv.verbose == 1){
 		gv = check_PC_driving_force( 	z_b,							/** bulk rock constraint 			*/ 
 										gv,								/** global variables (e.g. Gamma) 	*/
@@ -887,6 +894,7 @@ global_variable ReadCommandLineOptions(	global_variable 	 gv,
 		{ "mu_fix_idx", ko_optional_argument, 336 },
 		{ "mu_fix_val", ko_optional_argument, 337 },
 		{ "ss_solver",  ko_optional_argument, 338 },
+		{ "final_Newton_step", ko_optional_argument, 339 },
     	{ NULL, 0, 0 }
 	};
 	ketopt_t opt = KETOPT_INIT;
@@ -928,6 +936,7 @@ global_variable ReadCommandLineOptions(	global_variable 	 gv,
 		}
 		else if (c == 316){ gv.solver   		= atoi(opt.arg);			}
 		else if (c == 338){ gv.ss_solver   		= atoi(opt.arg);			}																		
+		else if (c == 339){ gv.final_Newton_step = atoi(opt.arg);			}
 		else if (c == 318){ gv.output_matlab   	= atoi(opt.arg); 			}																		
 		else if (c == 304){ gv.n_points 		= atoi(opt.arg); 	 		}
 		else if (c == 305){ gv.test  			= atoi(opt.arg); 			}
@@ -1153,6 +1162,7 @@ global_variable SetupDatabase(			global_variable 	 gv,
 
 		printf("--solver      : solver               = %i \n", 	 	   		gv.solver			);
 		printf("--ss_solver   : ss_solver            = %i \n", 	 	   		gv.ss_solver		);
+		printf("--final_Newton_step: final_Newton_step = %i \n", 	 	   	gv.final_Newton_step	);
 
 		printf("--limitCaOpx  : limitCaOpx           = %i \n", 	 	   		gv.limitCaOpx		);
 		printf("--CaOpxLim    : CaOpxLim             = %f \n", 	 	   		gv.CaOpxLim			);
@@ -1591,6 +1601,9 @@ void FreeDatabases(		global_variable gv,
 	free(gv.delta_pp_xi);
 
 	free(gv.A_PGE);
+	free(gv.fn_A);
+	free(gv.fn_b);
+	free(gv.fn_ipiv);
 	free(gv.A0_PGE);
 	free(gv.b_PGE);
 	free(gv.cp_id);

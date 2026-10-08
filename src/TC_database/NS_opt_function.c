@@ -1387,7 +1387,7 @@ static int ns_init_phase(	global_variable 	 gv,
 			d->ns_mode   = 3;
 		}
 	}
-	else if (ok){
+	else if (ok && d->ns_mode == 1){
 		int m = n_em - 1;
 		for (int i = 0; i < n_sf; i++){
 			for (int r = 0; r < m; r++){ d->ns_svdA[r + i*m] = d->ns_V[r + 1][i] - d->ns_V[0][i]; }

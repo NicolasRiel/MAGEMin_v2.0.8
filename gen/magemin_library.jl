@@ -752,6 +752,13 @@ mutable struct global_variables
     ns_imax::Cint
     ns_max_ite::Cint
     ns_gn_max::Cint
+    final_Newton_step::Cint
+    fn_status::Cint
+    fn_ite::Cint
+    fn_nz_max::Cint
+    fn_A::Ptr{Cdouble}
+    fn_b::Ptr{Cdouble}
+    fn_ipiv::Ptr{Cint}
     solver_switch_T::Cdouble
     seismicScheme::Cint
     seismicWeightFactor::Cdouble
@@ -3718,6 +3725,10 @@ end
 
 function norm_vector(array, n)
     ccall((:norm_vector, libMAGEMin), Cdouble, (Ptr{Cdouble}, Cint), array, n)
+end
+
+function final_Newton(z_b, gv, PC_read, PP_ref_db, SS_ref_db, cp)
+    ccall((:final_Newton, libMAGEMin), global_variable, (bulk_info, global_variable, Ptr{PC_type}, Ptr{PP_ref}, Ptr{SS_ref}, Ptr{csd_phase_set}), z_b, gv, PC_read, PP_ref_db, SS_ref_db, cp)
 end
 
 function dump_init(gv)

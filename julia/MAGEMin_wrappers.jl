@@ -1476,7 +1476,7 @@ function exclude_DEW_species(  dtb     :: String,
 end
 
 """
-    Initialize_MAGEMin(db="ig"; verbose=0, dataset=nothing, limitCaOpx=0, CaOpxLim=0.0, mbCpx=1, mbIlm=0, mpSp=0, mpIlm=0, ig_ed=0, buffer="NONE", solver=0, optimizer=0)
+    Initialize_MAGEMin(db="ig"; verbose=0, dataset=nothing, limitCaOpx=0, CaOpxLim=0.0, mbCpx=1, mbIlm=0, mpSp=0, mpIlm=0, ig_ed=0, buffer="NONE", solver=0, optimizer=0, final_Newton_step=1)
 
     Initialize MAGEMin on one or more threads for the specified database.
 
@@ -1519,6 +1519,11 @@ end
         minimization with NLopt fallback.
         With 1, oxides set exactly to zero in the bulk are removed from the system, including
         the core oxides that are otherwise raised to 1e-4 (reduced systems below FMAS).
+    final_Newton_step : Int64, optional
+        Newton polish of the converged assemblage (THERMOCALC and Stixrude & Lithgow-Bertelloni
+        databases): 1 active (default), 0 inactive. Solves the equilibrium conditions of the
+        stable assemblage to machine precision, so that chemical potentials, phase fractions and
+        compositions are consistent; the solver result is kept when the step does not converge.
 
     Returns
     -------
@@ -1538,6 +1543,7 @@ function Initialize_MAGEMin(db = "ig";  verbose     ::Union{Int64,Bool} = 0,
                                         mu_fix_idx  ::Vector{String}    = String[],
                                         solver      ::Int64             = 0,
                                         optimizer   ::Int64             = 0,
+                                        final_Newton_step ::Int64       = 1,
                                         seismicScheme :: String         = "VRH",
                                         seismicWeightFactor :: Float64    = 0.5)
 
@@ -1569,6 +1575,7 @@ function Initialize_MAGEMin(db = "ig";  verbose     ::Union{Int64,Bool} = 0,
                                                     mu_fix_idx  = mu_fix_idx,
                                                     solver      = solver,
                                                     optimizer   = optimizer,
+                                                    final_Newton_step = final_Newton_step,
                                                     seismicScheme = seismicScheme,
                                                     seismicWeightFactor = seismicWeightFactor );
 
@@ -1605,7 +1612,7 @@ end
 
 
 """
-    init_MAGEMin(db="ig"; verbose=0, dataset=nothing, mbCpx=0, mbIlm=0, mpSp=0, mpIlm=0, ig_ed=0, limitCaOpx=0, CaOpxLim=1.0, buffer="NONE", solver=0, optimizer=0)
+    init_MAGEMin(db="ig"; verbose=0, dataset=nothing, mbCpx=0, mbIlm=0, mpSp=0, mpIlm=0, ig_ed=0, limitCaOpx=0, CaOpxLim=1.0, buffer="NONE", solver=0, optimizer=0, final_Newton_step=1)
 
     Initialize MAGEMin (including setting global options) and load the database for a single thread.
 
@@ -1653,6 +1660,11 @@ end
         minimization with NLopt fallback.
         With 1, oxides set exactly to zero in the bulk are removed from the system, including
         the core oxides that are otherwise raised to 1e-4 (reduced systems below FMAS).
+    final_Newton_step : Int64, optional
+        Newton polish of the converged assemblage (THERMOCALC and Stixrude & Lithgow-Bertelloni
+        databases): 1 active (default), 0 inactive. Solves the equilibrium conditions of the
+        stable assemblage to machine precision, so that chemical potentials, phase fractions and
+        compositions are consistent; the solver result is kept when the step does not converge.
 
     Returns
     -------
@@ -1679,6 +1691,7 @@ function  init_MAGEMin( db          :: String               =  "ig";
                         mu_fix_idx  :: Vector{String}        =  String[],
                         solver      :: Int64                =   0,
                         optimizer   :: Int64                =   0,
+                        final_Newton_step :: Int64          =   1,
                         seismicScheme :: String             =  "VRH",
                         seismicWeightFactor :: Float64      = 0.5 )
 
@@ -1713,6 +1726,8 @@ function  init_MAGEMin( db          :: String               =  "ig";
     optimizer in (0, 1) || error("optimizer must be 0 (NLopt) or 1 (nullspace), got $optimizer")
     gv.solver       = solver
     gv.ss_solver    = optimizer
+    final_Newton_step in (0, 1) || error("final_Newton_step must be 0 or 1, got $final_Newton_step")
+    gv.final_Newton_step = final_Newton_step
     gv.seismicScheme        = seismicScheme == "VRH" ? 0 : 1
     gv.seismicWeightFactor  = seismicWeightFactor
 
@@ -4753,6 +4768,54 @@ end
 
 
 """
+    shift_mSS_to_out!(mSS_vec, out)
+
+Translates the solution-phase pseudocompounds of the LP basis (the first `n` entries of `mSS_vec`, `n` = number
+of non-zero oxides) so that, for every stable phase instance of `out`, the fraction-weighted mean of its
+pseudocompounds equals the composition reported in `out.SS_vec`. The weights are the LP fractions of the basis
+(`A n = bulk`); each pseudocompound is assigned to the closest stable instance of the same phase. Entries after the
+basis (e.g. "ppc") are left unchanged. Used by `point_wise_metastability` so that metastable evaluations refer to the reported
+(final Newton polished) phase compositions; `out.mSS_vec` itself is left unchanged.
+"""
+function shift_mSS_to_out!(mSS_vec, out)
+    nz      = findall(>(0.0), out.bulk)
+    nm      = min(length(nz), length(mSS_vec))
+    nm == 0 && return mSS_vec
+    A       = zeros(length(nz), nm)
+    for k = 1:nm
+        A[:, k] .= mSS_vec[k].comp_Ppc[nz]
+    end
+    w       = A \ out.bulk[nz]
+
+    ss_ids  = findall(==(1), out.ph_type)
+    group   = [Int[] for _ in ss_ids]
+    for k = 1:nm
+        mSS_vec[k].ph_type == "ss" || continue
+        best = 0; dbest = Inf
+        for (q, i) in enumerate(ss_ids)
+            out.ph[i] == mSS_vec[k].ph_name || continue
+            d = sum(abs2, mSS_vec[k].xeos_Ppc .- out.SS_vec[q].compVariables)
+            if d < dbest
+                best = q; dbest = d
+            end
+        end
+        best > 0 && push!(group[best], k)
+    end
+
+    for (q, g) in enumerate(group)
+        isempty(g) && continue
+        sw = sum(w[g])
+        sw > 0.0 || continue
+        xm = sum(w[k] .* mSS_vec[k].xeos_Ppc for k in g) ./ sw
+        dx = out.SS_vec[q].compVariables .- xm
+        for k in g
+            mSS_vec[k].xeos_Ppc .+= dx
+        end
+    end
+    return mSS_vec
+end
+
+"""
     point_wise_metastability(out, P, T, gv, z_b, DB, splx_data)
 
     Compute the metastability of the solution phases from a previous minimization result at new pressure and temperature conditions.
@@ -4813,6 +4876,7 @@ function point_wise_metastability(  out     :: MAGEMin_C.gmin_struct{Float64, In
                                     anelastic_cor::  Bool   = false)
 
     mSS_vec = deepcopy(out.mSS_vec)                                
+    shift_mSS_to_out!(mSS_vec, out)
     gv      = define_bulk_rock(gv, out.bulk, out.oxides, "mol", out.database);
     # initialize MAGEMin up to G0 computation included
     gv, z_b, DB, splx_data = pwm_init(P, T, gv, z_b, DB, splx_data);
@@ -4868,9 +4932,10 @@ function point_wise_metastability(  out     :: MAGEMin_C.gmin_struct{Float64, In
             unsafe_copyto!(SS_ref_db[ph_id].gb_lvl,SS_ref_db[ph_id].gbase, SS_ref_db[ph_id].n_em)
             unsafe_copyto!(SS_ref_db[ph_id].iguess,pointer(mSS_vec[i].xeos_Ppc), SS_ref_db[ph_id].n_xeos)
             SS_ref_db[ph_id] = LibMAGEMin.PC_function(gv, PC_read, SS_ref_db[ph_id], z_b, ph_id-1)
+            ss_comp     = unsafe_wrap(Vector{Cdouble}, SS_ref_db[ph_id].ss_comp, gv.len_ox)
 
             g0_A_jll[i] = SS_ref_db[ph_id].df
-            A_jll[i,:]  = mSS_vec[i].comp_Ppc[nzEl_array]
+            A_jll[i,:]  = (ss_comp .* SS_ref_db[ph_id].factor)[nzEl_array]
             ph_id_A_jll[i,1] = 3
             ph_id_A_jll[i,2] = ph_id-1
             ph_id_A_jll[i,3] = 0
