@@ -67,6 +67,40 @@ typedef struct oxide_datas {
 } oxide_data;
 
 
+typedef struct fn_kkts {
+	int 	 stored;
+	int 	 nz;
+	int 	 m;
+	int 	 n_y;
+	int 	 n_cc;
+	int 	 n_ph;
+	int 	 n_pp;
+	int 	 n_s;
+	int 	 n_Nb;
+	int 	 cap_nz;
+	int 	 cap_s;
+	int 	 cap_Nb;
+	int 	*ox_id;
+	int 	*ss_id;
+	int 	*cp_id;
+	int 	*pp_id;
+	int 	*off_y;
+	int 	*off_s;
+	int 	*off_N;
+	int 	*off_c;
+	int 	*c_x;
+	int 	*drop;
+	double 	*c_b;
+	double 	*Nb;
+	double 	*s;
+	double 	*gam;
+	double 	*n;
+	double 	*mu;
+	double 	*R;
+	double 	*J;
+	double 	 G;
+} fn_kkt;
+
 /* structure to store global variables */
 typedef struct global_variables {
 	
@@ -104,6 +138,9 @@ typedef struct global_variables {
 	double  *fn_A;
 	double  *fn_b;
 	int     *fn_ipiv;
+	int      fn_store_kkt;
+	int      fn_from_state;
+	fn_kkt  *fn_sys;
 	double   solver_switch_T;
 	int 	 seismicScheme; 	/** 0: Voigt-Reuss-Hill, 1: Hashin-Shtrikman */
 	double   seismicWeightFactor; 	/** value between 0 and 1 to blend VRH and HS bounds for seismic properties calculation. 0 = pure VRH, 1 = pure HS, values in between = linear blend. When a fluid phase is present, G_min = 0, so HS- shear bound = 0 (handled by IEEE 754). */
@@ -1033,6 +1070,20 @@ global_variable ComputeEquilibrium_Point(	int 				 EM_database,
 											SS_ref  			*SS_ref_db,
 											csd_phase_set  		*cp					);
 										
+global_variable ComputeEquilibrium_FromState(	bulk_info 	 		 z_b,
+												global_variable 	 gv,
+												PP_ref  			*PP_ref_db,
+												SS_ref  			*SS_ref_db,
+												csd_phase_set  		*cp,
+												int 				 n_ss,
+												int 				*ss_ids,
+												double 				*ss_x,
+												double 				*ss_n,
+												int 				 n_pp,
+												int 				*pp_ids,
+												double 				*pp_n,
+												double 				*gam				);
+
 global_variable ComputeLevellingOnly( 		int 				 EM_database,
 											io_data 			 input_data,
 											bulk_info 	 		 z_b,

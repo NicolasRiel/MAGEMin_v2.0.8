@@ -725,6 +725,42 @@ end
 
 const oxide_data = oxide_datas
 
+struct fn_kkts
+    stored::Cint
+    nz::Cint
+    m::Cint
+    n_y::Cint
+    n_cc::Cint
+    n_ph::Cint
+    n_pp::Cint
+    n_s::Cint
+    n_Nb::Cint
+    cap_nz::Cint
+    cap_s::Cint
+    cap_Nb::Cint
+    ox_id::Ptr{Cint}
+    ss_id::Ptr{Cint}
+    cp_id::Ptr{Cint}
+    pp_id::Ptr{Cint}
+    off_y::Ptr{Cint}
+    off_s::Ptr{Cint}
+    off_N::Ptr{Cint}
+    off_c::Ptr{Cint}
+    c_x::Ptr{Cint}
+    drop::Ptr{Cint}
+    c_b::Ptr{Cdouble}
+    Nb::Ptr{Cdouble}
+    s::Ptr{Cdouble}
+    gam::Ptr{Cdouble}
+    n::Ptr{Cdouble}
+    mu::Ptr{Cdouble}
+    R::Ptr{Cdouble}
+    J::Ptr{Cdouble}
+    G::Cdouble
+end
+
+const fn_kkt = fn_kkts
+
 mutable struct global_variables
     version::Ptr{Cchar}
     verbose::Cint
@@ -759,6 +795,9 @@ mutable struct global_variables
     fn_A::Ptr{Cdouble}
     fn_b::Ptr{Cdouble}
     fn_ipiv::Ptr{Cint}
+    fn_store_kkt::Cint
+    fn_from_state::Cint
+    fn_sys::Ptr{fn_kkt}
     solver_switch_T::Cdouble
     seismicScheme::Cint
     seismicWeightFactor::Cdouble
@@ -1547,6 +1586,10 @@ function ComputeEquilibrium_Point(EM_database, input_data, z_b, gv, splx_data, P
     ccall((:ComputeEquilibrium_Point, libMAGEMin), global_variable, (Cint, io_data, bulk_info, global_variable, Ptr{simplex_data}, Ptr{PP_ref}, Ptr{SS_ref}, Ptr{csd_phase_set}), EM_database, input_data, z_b, gv, splx_data, PP_ref_db, SS_ref_db, cp)
 end
 
+function ComputeEquilibrium_FromState(z_b, gv, PP_ref_db, SS_ref_db, cp, n_ss, ss_ids, ss_x, ss_n, n_pp, pp_ids, pp_n, gam)
+    ccall((:ComputeEquilibrium_FromState, libMAGEMin), global_variable, (bulk_info, global_variable, Ptr{PP_ref}, Ptr{SS_ref}, Ptr{csd_phase_set}, Cint, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}, Cint, Ptr{Cint}, Ptr{Cdouble}, Ptr{Cdouble}), z_b, gv, PP_ref_db, SS_ref_db, cp, n_ss, ss_ids, ss_x, ss_n, n_pp, pp_ids, pp_n, gam)
+end
+
 function ComputeLevellingOnly(EM_database, input_data, z_b, gv, splx_data, PP_ref_db, SS_ref_db, cp)
     ccall((:ComputeLevellingOnly, libMAGEMin), global_variable, (Cint, io_data, bulk_info, global_variable, Ptr{simplex_data}, Ptr{PP_ref}, Ptr{SS_ref}, Ptr{csd_phase_set}), EM_database, input_data, z_b, gv, splx_data, PP_ref_db, SS_ref_db, cp)
 end
@@ -2183,6 +2226,14 @@ end
 
 function store_FD_interactions(SS_ref_db, FD)
     ccall((:store_FD_interactions, libMAGEMin), Cvoid, (Ptr{SS_ref}, Cint), SS_ref_db, FD)
+end
+
+function fn_kkt_alloc(gv)
+    ccall((:fn_kkt_alloc, libMAGEMin), Ptr{fn_kkt}, (global_variable,), gv)
+end
+
+function fn_kkt_free(k)
+    ccall((:fn_kkt_free, libMAGEMin), Cvoid, (Ptr{fn_kkt},), k)
 end
 
 function TC_SS_init_mp(SS_init, gv)

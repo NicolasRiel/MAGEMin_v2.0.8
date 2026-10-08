@@ -359,6 +359,7 @@ global_variable global_variable_SB_init( 	global_variable  	 gv,
 	gv.fn_A    = malloc ((gv.fn_nz_max*gv.fn_nz_max) 	* sizeof(double));
 	gv.fn_b    = malloc ((gv.fn_nz_max) 				* sizeof(double));
 	gv.fn_ipiv = malloc ((gv.fn_nz_max) 				* sizeof(int)	);
+	gv.fn_sys  = fn_kkt_alloc(gv);
 
 	gv.cp_id  = malloc ((gv.len_ox) 				* sizeof(int)	);			
 	gv.pp_id  = malloc ((gv.len_ox) 				* sizeof(int)	);			

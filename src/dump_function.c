@@ -271,8 +271,9 @@ void mSS_output_struct(			global_variable 	 gv,
 	/* get LP assemblage - This routine retrieves the information of the solution phases and pure phase as computed at equilibrium -> to be used as initial guess */
 	m = 0;
 	simplex_data *d  = (simplex_data *) splx_data;
+	int 	n_lp = (gv.fn_from_state == 1) ? 0 : d->n_Ox;
 
-	for (i = 0; i < d->n_Ox; i++){
+	for (i = 0; i < n_lp; i++){
 		ph_id 		= d->ph_id_A[i][1];
 
 

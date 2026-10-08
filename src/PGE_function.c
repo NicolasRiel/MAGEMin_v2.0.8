@@ -50,7 +50,7 @@ The routine is the core of MAGEMin algorithm and is constructed around the Gibbs
 #define FN_MAX_DROP 		2
 #define FN_TOL 				1e-9
 #define FN_H 				1e-6
-#define FN_H2 				1e-4
+#define FN_H2 				1e-5
 #define FN_S_FIX 			1e-9
 #define FN_N_TOL 			1e-12
 #define FN_X_TOL 			1e-9
@@ -1779,6 +1779,112 @@ static int fn_add_xbounds(			global_variable 	 gv,
 	return n_add;
 }
 
+static int fn_kkt_reserve(			fn_kkt 				*k,
+									int 				 nz,
+									int 				 n_s,
+									int 				 n_Nb			){
+	if (nz > k->cap_nz){
+		free(k->c_x);
+		free(k->c_b);
+		free(k->mu);
+		free(k->R);
+		free(k->J);
+		k->c_x    = malloc ((nz) 					* sizeof(int)	);
+		k->c_b    = malloc ((nz) 					* sizeof(double));
+		k->mu     = malloc ((nz) 					* sizeof(double));
+		k->R      = malloc ((nz) 					* sizeof(double));
+		k->J      = malloc ((nz*nz) 				* sizeof(double));
+		k->cap_nz = nz;
+	}
+	if (n_s > k->cap_s){
+		free(k->s);
+		k->s      = malloc ((n_s) 					* sizeof(double));
+		k->cap_s  = n_s;
+	}
+	if (n_Nb > k->cap_Nb){
+		free(k->Nb);
+		k->Nb     = malloc ((n_Nb) 					* sizeof(double));
+		k->cap_Nb = n_Nb;
+	}
+	if (k->c_x == NULL || k->c_b == NULL || k->mu == NULL || k->R == NULL || k->J == NULL || k->s == NULL || k->Nb == NULL){
+		k->cap_nz = 0;
+		k->cap_s  = 0;
+		k->cap_Nb = 0;
+		return 1;
+	}
+	return 0;
+}
+
+static int fn_kkt_store(			global_variable 	 gv,
+									bulk_info 	 		 z_b,
+									PP_ref 				*PP_ref_db,
+									SS_ref 				*SS_ref_db,
+									csd_phase_set  		*cp,
+									int 				 n_ph,
+									int 				 n_pp,
+									const int 			*ph_cp,
+									const int 			*pp_id,
+									const int 			*off_y,
+									const int 			*off_s,
+									const int 			*off_N,
+									const double 		*Nb,
+									const int 			*off_c,
+									const int 			*c_id,
+									const int 			*cx_j,
+									const double 		*cx_b,
+									const double 		*gam,
+									const double 		*s,
+									const double 		*mu,
+									const double 		*n,
+									const int 			*drop,
+									double 				 G,
+									fn_kkt 				*k				){
+	int 	m    = z_b.nzEl_val;
+	int 	n_y  = off_y[n_ph];
+	int 	n_cc = off_c[n_ph];
+	int 	nz   = m + n_y + n_cc + n_ph + n_pp;
+
+	k->stored = 0;
+	if (fn_kkt_reserve(k, nz, (off_s[n_ph] > 0) ? off_s[n_ph] : 1, (off_N[n_ph] > 0) ? off_N[n_ph] : 1) != 0){ return 1; }
+	if (fn_system(gv, z_b, PP_ref_db, SS_ref_db, cp, n_ph, n_pp, ph_cp, pp_id, off_y, off_s, off_N, Nb, off_c, c_id, cx_j, cx_b, gam, s, mu, n, drop, k->R, k->J) != 0){ return 1; }
+
+	k->nz   = nz;
+	k->m    = m;
+	k->n_y  = n_y;
+	k->n_cc = n_cc;
+	k->n_ph = n_ph;
+	k->n_pp = n_pp;
+	k->n_s  = off_s[n_ph];
+	k->n_Nb = off_N[n_ph];
+	k->G    = G;
+	for (int jj = 0; jj < m; jj++){ k->ox_id[jj] = z_b.nzEl_array[jj]; }
+	for (int j = 0; j < gv.len_ox; j++){ k->gam[j] = gam[j]; }
+	for (int q = 0; q <= n_ph; q++){
+		k->off_y[q] = off_y[q];
+		k->off_s[q] = off_s[q];
+		k->off_N[q] = off_N[q];
+		k->off_c[q] = off_c[q];
+	}
+	for (int q = 0; q < n_ph; q++){
+		k->cp_id[q] = ph_cp[q];
+		k->ss_id[q] = cp[ph_cp[q]].id;
+	}
+	for (int q = 0; q < n_pp; q++){ k->pp_id[q] = pp_id[q]; }
+	for (int q = 0; q < n_ph + n_pp; q++){
+		k->n[q]    = n[q];
+		k->drop[q] = drop[q];
+	}
+	for (int c = 0; c < n_cc; c++){
+		k->c_x[c] = cx_j[c_id[c]];
+		k->c_b[c] = cx_b[c_id[c]];
+		k->mu[c]  = mu[c];
+	}
+	for (int i = 0; i < off_s[n_ph]; i++){ k->s[i] = s[i]; }
+	for (int i = 0; i < off_N[n_ph]; i++){ k->Nb[i] = Nb[i]; }
+
+	return 0;
+}
+
 global_variable final_Newton(		bulk_info 	 		 z_b,
 									global_variable 	 gv,
 									PC_type 			*PC_read,
@@ -1787,6 +1893,7 @@ global_variable final_Newton(		bulk_info 	 		 z_b,
 									csd_phase_set  		*cp				){
 	gv.fn_status = 0;
 	gv.fn_ite    = 0;
+	if (gv.fn_sys != NULL){ gv.fn_sys->stored = 0; }
 	if (gv.final_Newton_step != 1 || gv.fn_A == NULL){ return gv; }
 
 	gv.fn_status = -1;
@@ -2089,6 +2196,11 @@ global_variable final_Newton(		bulk_info 	 		 z_b,
 		}
 	}
 
+	int kkt = 0;
+	if (ok && gv.fn_store_kkt == 1 && gv.fn_sys != NULL){
+		kkt = (fn_kkt_store(gv, z_b, PP_ref_db, SS_ref_db, cp, n_ph, n_pp, ph_cp, pp_id, off_y, off_s, off_N, Nb, off_c, c_id, cx_j, cx_b, gam, s, mu, n, drop, G1, gv.fn_sys) == 0);
+	}
+
 	for (int q = 0; q < n_ph + n_pp && ok && n_drop > 0; q++){
 		if (drop[q] == 0){ continue; }
 		if (q < n_ph){
@@ -2183,6 +2295,7 @@ global_variable final_Newton(		bulk_info 	 		 z_b,
 		gv.LP    = LP0;
 		gv.PGE   = PGE0;
 		gv.fn_status = (n_drop > 0) ? 2 : 1;
+		if (kkt){ gv.fn_sys->stored = 1; }
 	}
 	else{
 		fn_restore_ss(gv, z_b, PC_read, SS_ref_db, cp, n_ph, ph_cp);

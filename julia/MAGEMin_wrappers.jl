@@ -23,6 +23,7 @@ export  anhydrous_renormalization, retrieve_solution_phase_information, print_ph
         init_MAGEMin, allocate_output,finalize_MAGEMin, point_wise_minimization, 
         get_all_stable_phases, convertBulk4MAGEMin, use_predefined_bulk_rock, define_bulk_rock, create_output,
         print_info, create_gmin_struct, pwm_init, pwm_run, p2x_convert, pc_convert, lm_convert,
+        pwm_run_from_state, point_wise_newton_from_state, equilibrium_state, get_final_newton_system,
         point_wise_metastability,
         single_point_minimization, multi_point_minimization, AMR_minimization, MAGEMin_Data,
         MAGEMin_data2dataframe, MAGEMin_dataTE2dataframe, MAGEMin_data2dataframe_inlined,
@@ -744,6 +745,136 @@ mutable struct gbase_data{T <: Float64,I <: Int64}
     n_Gs        :: I
     em_ids      :: Vector{I}
     dG          :: Matrix{T}   #S T P * n_Gs
+end
+
+
+"""
+    v_data{T, I}
+
+    Mutable structure holding overriding asymmetry (van Laar) parameters of a
+    solution phase. Like `W_data`, it *replaces* the default values:
+    `v[i] = vs[i,1] + vs[i,2]*T + vs[i,3]*P`.
+
+    Database mapping is the same as for `W_data`.
+
+    Fields
+    ------
+    dtb : I
+        Database identifier.
+    ss_ids : I
+        Solution phase identifier.
+    n_vs : I
+        Number of asymmetry parameters (must equal the number of endmembers of the solution phase).
+    vs : Matrix{T}
+        Asymmetry parameters matrix (n_vs × 3), columns = [constant, T-coeff, P-coeff].
+"""
+mutable struct v_data{T <: Float64,I <: Int64}
+    dtb         :: I
+    ss_ids      :: I
+    n_vs        :: I
+    vs          :: Matrix{T}
+end
+
+
+function override_interactions!(gv, z_b, DB, ovr, name)
+    SS_ref_db   = unsafe_wrap(Vector{LibMAGEMin.SS_ref},DB.SS_ref_db,gv.len_ss);
+    pdev_P      = unsafe_wrap(Vector{Cdouble}, unsafe_load(gv.pdev, 1), gv.n_Diff)
+    pdev_T      = unsafe_wrap(Vector{Cdouble}, unsafe_load(gv.pdev, 2), gv.n_Diff)
+    Pw          = z_b.P
+    Tw          = z_b.T
+
+    for n=1:length(ovr)
+        if gv.EM_database != ovr[n].dtb
+            continue
+        end
+        ss          = ovr[n].ss_ids
+        d           = SS_ref_db[ss]
+        if name == "W"
+            n_par, n_in, coef, val_ptr, arr_ptr = d.n_w, ovr[n].n_Ws, ovr[n].Ws, d.W, d.W_array
+        else
+            n_par, n_in, coef, val_ptr, arr_ptr = d.n_v, ovr[n].n_vs, ovr[n].vs, d.v, d.v_array
+        end
+        if n_in != n_par || val_ptr == C_NULL
+            print(" Wrong number of $(name)'s, please make sure the custom $(name)s are linked to the right solution model\n $(name)s override will be ignored\n")
+            println(" n_$(name) target= $(n_par), n_$(name) provided = $(n_in)")
+            continue
+        end
+
+        val         = unsafe_wrap(Vector{Cdouble}, val_ptr, n_par)
+        for i=1:n_par
+            val[i]  = coef[i,1] + coef[i,2]*Tw + coef[i,3]*Pw
+        end
+        if arr_ptr != C_NULL
+            rows    = unsafe_wrap(Vector{Ptr{Cdouble}}, arr_ptr, gv.n_Diff)
+            for FD=1:gv.n_Diff
+                Pfd     = Pw + gv.gb_P_eps*pdev_P[FD]
+                Tfd     = Tw + gv.gb_T_eps*pdev_T[FD]
+                row     = unsafe_wrap(Vector{Cdouble}, rows[FD], n_par)
+                for i=1:n_par
+                    row[i] = coef[i,1] + coef[i,2]*Tfd + coef[i,3]*Pfd
+                end
+            end
+        end
+    end
+    return nothing
+end
+
+function override_gbase!(gv, z_b, DB, gbase)
+    n_over_g    = length(gbase)
+    Pw          = z_b.P
+    Tw          = z_b.T
+    for n=1:n_over_g
+
+        if gv.EM_database == gbase[n].dtb
+            ss          = gbase[n].ss_ids
+            SS_ref_db   = unsafe_wrap(Vector{LibMAGEMin.SS_ref},DB.SS_ref_db,gv.len_ss);
+            n_em        = SS_ref_db[ss].n_em;
+            if gbase[n].n_Gs == length(gbase[n].em_ids) == size(gbase[n].dG,1)
+                gbase_vec   = unsafe_wrap(Vector{Cdouble}, SS_ref_db[ss].gbase, n_em)
+                mu_array_ptr= unsafe_wrap(Vector{Ptr{Cdouble}}, SS_ref_db[ss].mu_array, gv.n_Diff)
+                pdev_P      = unsafe_wrap(Vector{Cdouble}, unsafe_load(gv.pdev, 1), gv.n_Diff)
+                pdev_T      = unsafe_wrap(Vector{Cdouble}, unsafe_load(gv.pdev, 2), gv.n_Diff)
+
+                for k=1:gbase[n].n_Gs
+                    em_id   = gbase[n].em_ids[k]
+                    if 1 <= em_id <= n_em
+                        delta0              = gbase[n].dG[k,1] + gbase[n].dG[k,2]*Tw + gbase[n].dG[k,3]*Pw
+                        gbase_vec[em_id]    += delta0
+
+                        for FD=1:gv.n_Diff
+                            Pfd             = Pw + gv.gb_P_eps*pdev_P[FD]
+                            Tfd             = Tw + gv.gb_T_eps*pdev_T[FD]
+                            deltaFD         = gbase[n].dG[k,1] + gbase[n].dG[k,2]*Tfd + gbase[n].dG[k,3]*Pfd
+                            mu_row          = unsafe_wrap(Vector{Cdouble}, mu_array_ptr[FD], n_em)
+                            mu_row[em_id]   += deltaFD
+                        end
+                    else
+                        print(" Invalid endmember index, please make sure em_ids are within the solution model's endmember range\n gbase override for this endmember will be ignored\n")
+                        println(" n_em target= $(n_em), em_id provided = $(em_id)")
+                    end
+                end
+            else
+                print(" Inconsistent gbase_data sizes, n_Gs, em_ids and dG must all agree in length\n gbase override will be ignored\n")
+                println(" n_Gs= $(gbase[n].n_Gs), length(em_ids)= $(length(gbase[n].em_ids)), size(dG,1)= $(size(gbase[n].dG,1))")
+            end
+        end
+
+    end
+    return nothing
+end
+
+"""
+    apply_parameter_overrides!(gv, z_b, DB; W = nothing, gbase = nothing, v = nothing)
+
+    Apply the Margules (`W_data`), asymmetry (`v_data`) and endmember reference Gibbs energy
+    (`gbase_data`) overrides at the current (P,T) of `z_b`, and at the finite-difference
+    (P,T) points used for the derived properties. Must be called after `ComputeG0_point`.
+"""
+function apply_parameter_overrides!(gv, z_b, DB; W = nothing, gbase = nothing, v = nothing)
+    isnothing(W)     || override_interactions!(gv, z_b, DB, W, "W")
+    isnothing(v)     || override_interactions!(gv, z_b, DB, v, "v")
+    isnothing(gbase) || override_gbase!(gv, z_b, DB, gbase)
+    return nothing
 end
 
 
@@ -2987,6 +3118,11 @@ end
     seismic_water : Int, optional
         Water content mode passed to [`anelastic_correction`](@ref) when `seismic_cor=true`:
         `0` = dry mantle, `1` = damp mantle, `2` = wet mantle (default: 0).
+    v : Union{Nothing, Vector{v_data{Float64, Int64}}}, optional
+        Overriding asymmetry (van Laar) parameters (default: nothing).
+    hook : Union{Nothing, Function}, optional
+        Function `hook(gv, z_b, DB)` called after the reference Gibbs energies and the
+        `W`/`gbase`/`v` overrides are set, right before the minimization (default: nothing).
 
     Returns
     -------
@@ -3048,7 +3184,9 @@ function point_wise_minimization(   P       ::Float64,
                                     shallow_correction = false,
                                     fluid_as_melt = false,
                                     anelastic_cor = false,
-                                    filter_DEW_species = false)
+                                    filter_DEW_species = false,
+                                    v           = nothing,
+                                    hook        = nothing)
 
     gv.buffer_n     =   buffer_n;
     if gv.n_mu_fix > 0
@@ -3089,79 +3227,9 @@ function point_wise_minimization(   P       ::Float64,
 
     gv      = LibMAGEMin.ComputeG0_point(gv.EM_database, z_b, gv, DB.PP_ref_db,DB.SS_ref_db);
 
-    # here we can over-ride default W's
-    if ~isnothing(W)
-        n_over  = length(W)
-        Pw      = z_b.P
-        Tw      = z_b.T
-        for n=1:n_over
+    apply_parameter_overrides!(gv, z_b, DB; W = W, gbase = gbase, v = v)
 
-            if gv.EM_database == W[n].dtb
-                ss          = W[n].ss_ids
-                SS_ref_db   = unsafe_wrap(Vector{LibMAGEMin.SS_ref},DB.SS_ref_db,gv.len_ss);
-                n_W         = SS_ref_db[ss].n_w;
-                if W[n].n_Ws == n_W
-                    # override = 1
-                    # unsafe_copyto!(pointer(SS_ref_db[ss].override), pointer(override), 1) 
-                    # SS_ref_db[ss].override = 1;                                                     # set the override flag to 1
-                    # Wdef    = unsafe_wrap(Vector{Cdouble},SS_ref_db[ss].W, SS_ref_db[ss].n_w);      # retrieve default Ws
-                    new_Ws  = zeros(n_W)
-                    for i=1:n_W
-                        new_Ws[i] = W[n].Ws[i,1] + W[n].Ws[i,2]*Tw + W[n].Ws[i,3]*Pw 
-                    end
-                    unsafe_copyto!(SS_ref_db[ss].W, pointer(new_Ws), SS_ref_db[ss].n_w) 
-                else
-                    print(" Wrong number of W's, please make sure the custom Ws are linked to the right solution model\n Ws override will be ignored\n")
-                    println(" n_W target= $(n_W), n_W provided = $(W[n].n_Ws)")
-                end
-            end
-
-        end
-    end
-
-    # here we can apply additive shifts to default endmember gbase's
-    if ~isnothing(gbase)
-        n_over_g    = length(gbase)
-        Pw          = z_b.P
-        Tw          = z_b.T
-        for n=1:n_over_g
-
-            if gv.EM_database == gbase[n].dtb
-                ss          = gbase[n].ss_ids
-                SS_ref_db   = unsafe_wrap(Vector{LibMAGEMin.SS_ref},DB.SS_ref_db,gv.len_ss);
-                n_em        = SS_ref_db[ss].n_em;
-                if gbase[n].n_Gs == length(gbase[n].em_ids) == size(gbase[n].dG,1)
-                    gbase_vec   = unsafe_wrap(Vector{Cdouble}, SS_ref_db[ss].gbase, n_em)
-                    mu_array_ptr= unsafe_wrap(Vector{Ptr{Cdouble}}, SS_ref_db[ss].mu_array, gv.n_Diff)
-                    pdev_P      = unsafe_wrap(Vector{Cdouble}, unsafe_load(gv.pdev, 1), gv.n_Diff)
-                    pdev_T      = unsafe_wrap(Vector{Cdouble}, unsafe_load(gv.pdev, 2), gv.n_Diff)
-
-                    for k=1:gbase[n].n_Gs
-                        em_id   = gbase[n].em_ids[k]
-                        if 1 <= em_id <= n_em
-                            delta0              = gbase[n].dG[k,1] + gbase[n].dG[k,2]*Tw + gbase[n].dG[k,3]*Pw
-                            gbase_vec[em_id]    += delta0
-
-                            for FD=1:gv.n_Diff
-                                Pfd             = Pw + gv.gb_P_eps*pdev_P[FD]
-                                Tfd             = Tw + gv.gb_T_eps*pdev_T[FD]
-                                deltaFD         = gbase[n].dG[k,1] + gbase[n].dG[k,2]*Tfd + gbase[n].dG[k,3]*Pfd
-                                mu_row          = unsafe_wrap(Vector{Cdouble}, mu_array_ptr[FD], n_em)
-                                mu_row[em_id]   += deltaFD
-                            end
-                        else
-                            print(" Invalid endmember index, please make sure em_ids are within the solution model's endmember range\n gbase override for this endmember will be ignored\n")
-                            println(" n_em target= $(n_em), em_id provided = $(em_id)")
-                        end
-                    end
-                else
-                    print(" Inconsistent gbase_data sizes, n_Gs, em_ids and dG must all agree in length\n gbase override will be ignored\n")
-                    println(" n_Gs= $(gbase[n].n_Gs), length(em_ids)= $(length(gbase[n].em_ids)), size(dG,1)= $(size(gbase[n].dG,1))")
-                end
-            end
-
-        end
-    end
+    hook === nothing || hook(gv, z_b, DB)
 
     # gv      = LibMAGEMin.ComputeG0_point(gv.EM_database, z_b, gv, DB.PP_ref_db,DB.SS_ref_db);
 
@@ -3675,6 +3743,188 @@ function pwm_run(gv, z_b, DB, splx_data; name_solvus = false, seismic_cor = fals
     # LibMAGEMin.FreeDatabases(gv, DB, z_b);
 
     return out
+end
+
+
+"""
+    equilibrium_state(out)
+
+    Equilibrium state of a minimization result, in the form expected by
+    [`pwm_run_from_state`](@ref) and [`point_wise_newton_from_state`](@ref).
+
+    Parameters
+    ----------
+    out : gmin_struct{Float64, Int64}
+        Minimization result.
+
+    Returns
+    -------
+    state : NamedTuple
+        `ss_ids` (0-based solution phase ids), `ss_x` (concatenated compositional variables),
+        `ss_n` (solution phase fractions, 1-atom basis), `pp_ids` (0-based pure phase ids),
+        `pp_n` (pure phase fractions, 1-atom basis) and `gam` (oxide chemical potentials).
+"""
+function equilibrium_state(out)
+    ss_ids  = Cint[]
+    ss_x    = Float64[]
+    ss_n    = Float64[]
+    pp_ids  = Cint[]
+    pp_n    = Float64[]
+    iss     = 0
+    for i in eachindex(out.ph)
+        if out.ph_type[i] == 1
+            iss += 1
+            push!(ss_ids, out.ph_id_db[i])
+            append!(ss_x, out.SS_vec[iss].compVariables)
+            push!(ss_n, out.ph_frac_1at[i])
+        else
+            push!(pp_ids, out.ph_id_db[i])
+            push!(pp_n, out.ph_frac_1at[i])
+        end
+    end
+    return (ss_ids = ss_ids, ss_x = ss_x, ss_n = ss_n, pp_ids = pp_ids, pp_n = pp_n, gam = copy(out.Gamma))
+end
+
+
+"""
+    pwm_run_from_state(gv, z_b, DB, splx_data, state; name_solvus=false, seismic_cor=false, aspect_ratio=0.3)
+
+    Load a given equilibrium state (see [`equilibrium_state`](@ref)) after `pwm_init` and solve the
+    equilibrium of this assemblage with the final Newton step only (no levelling, no LP/PGE).
+    Phases can still be removed by the Newton step when their fraction vanishes. The result
+    follows the branch of the given state, which makes it suited for continuation in
+    thermodynamic database calibration workflows.
+
+    `out.status` is `0` when the Newton step converged and `-1` otherwise (the loaded state is
+    then returned unchanged). The `mSS_vec` of the result holds no LP basis.
+
+    Returns
+    -------
+    out : gmin_struct{Float64, Int64}
+        Structure containing the minimization results.
+"""
+function pwm_run_from_state(gv, z_b, DB, splx_data, state; name_solvus = false, seismic_cor = false, aspect_ratio = 0.3, seismic_water = 0, shallow_correction = false, fluid_as_melt = false, anelastic_cor = false, filter_DEW_species = false)
+    ss_ids  = Vector{Cint}(state.ss_ids)
+    ss_x    = Vector{Cdouble}(state.ss_x)
+    ss_n    = Vector{Cdouble}(state.ss_n)
+    pp_ids  = Vector{Cint}(state.pp_ids)
+    pp_n    = Vector{Cdouble}(state.pp_n)
+    gam     = Vector{Cdouble}(state.gam)
+
+    time = @elapsed  gv      = LibMAGEMin.ComputeEquilibrium_FromState(z_b, gv, DB.PP_ref_db, DB.SS_ref_db, DB.cp, length(ss_ids), ss_ids, ss_x, ss_n, length(pp_ids), pp_ids, pp_n, gam);
+
+    gv = LibMAGEMin.ComputePostProcessing(z_b, gv, DB.PP_ref_db, DB.SS_ref_db, DB.cp)
+
+    LibMAGEMin.fill_output_struct(gv, pointer_from_objref(splx_data), z_b, DB.PP_ref_db,DB.SS_ref_db, DB.cp, DB.sp );
+
+    LibMAGEMin.PrintOutput(gv, 0, 1, DB, time, z_b);
+
+    out = deepcopy(create_gmin_struct(DB, gv, time; name_solvus = name_solvus, seismic_cor = seismic_cor, aspect_ratio = aspect_ratio, seismic_water = seismic_water, shallow_correction = shallow_correction, fluid_as_melt = fluid_as_melt, anelastic_cor = anelastic_cor, filter_DEW_species = filter_DEW_species));
+
+    return out
+end
+
+
+"""
+    point_wise_newton_from_state(P, T, gv, z_b, DB, splx_data, state; W=nothing, gbase=nothing, v=nothing, hook=nothing, name_solvus=false)
+
+    Same as [`pwm_run_from_state`](@ref), preceded by `pwm_init` at (P, T) and by the `W`, `gbase`
+    and `v` overrides and the `hook` of [`point_wise_minimization`](@ref).
+
+    Examples
+    --------
+    ```julia
+    gv, z_b, DB, splx_data = init_MAGEMin("mp");
+    gv      = use_predefined_bulk_rock(gv, 0, "mp");
+    gv.verbose = -1
+    out     = point_wise_minimization(6.0, 650.0, gv, z_b, DB, splx_data)
+    st      = equilibrium_state(out)
+    out2    = point_wise_newton_from_state(6.0, 655.0, gv, z_b, DB, splx_data, st)
+    ```
+"""
+function point_wise_newton_from_state(  P       ::Float64,
+                                        T       ::Float64,
+                                        gv,
+                                        z_b,
+                                        DB,
+                                        splx_data,
+                                        state;
+                                        W           = nothing,
+                                        gbase       = nothing,
+                                        v           = nothing,
+                                        hook        = nothing,
+                                        name_solvus = false)
+
+    if P < 0.001
+        P = 0.001
+    end
+    gv, z_b, DB, splx_data = pwm_init(P, T, gv, z_b, DB, splx_data)
+
+    apply_parameter_overrides!(gv, z_b, DB; W = W, gbase = gbase, v = v)
+
+    hook === nothing || hook(gv, z_b, DB)
+
+    return pwm_run_from_state(gv, z_b, DB, splx_data, state; name_solvus = name_solvus)
+end
+
+
+"""
+    get_final_newton_system(gv)
+
+    Final Newton system stored by the last minimization when `gv.fn_store_kkt = 1` and the final
+    Newton step was accepted, `nothing` otherwise.
+
+    Unknowns z = [Γ (`m` oxides with non-zero bulk); y (`n_y` coordinates along the reduced
+    nullspace of each solution phase); μ (`n_cc` compositional bound multipliers); n (`n_ph`
+    solution phases, then `n_pp` pure phases)]. Residuals R = [Nᵀ∇D − Σμ∇x (`n_y`); x − bound
+    (`n_cc`); D or n if removed (`n_ph`); G − Γ·c or n if removed (`n_pp`); mass balance (`m`)].
+    J = ∂R/∂z at the converged state (column-major, `nz` × `nz`).
+
+    Returns
+    -------
+    sys : NamedTuple
+        Layout (`nz`, `m`, `n_y`, `n_cc`, `n_ph`, `n_pp`, 1-based `ox_id`, `off_y`, `off_c`),
+        phases (1-based `ss_id`, `ss_name`, `cp_id`, `pp_id`, `pp_name`, `drop`), the nullspace
+        coordinates `s` and bases `N` (`ns_nc` × k) of each solution phase, the active
+        compositional bounds (`c_ph`, 1-based `c_x`, `c_b`), the state (`Gamma`, `n`, `mu`, `G`),
+        `R` and `J`.
+"""
+function get_final_newton_system(gv)
+    gv.fn_sys == C_NULL && return nothing
+    k       = unsafe_load(gv.fn_sys)
+    k.stored == 1 || return nothing
+
+    vi(p, n) = n > 0 ? Int.(copy(unsafe_wrap(Vector{Cint}, p, n))) : Int[]
+    vd(p, n) = n > 0 ? copy(unsafe_wrap(Vector{Cdouble}, p, n)) : Float64[]
+
+    n_ph, n_pp, nz, n_cc = Int(k.n_ph), Int(k.n_pp), Int(k.nz), Int(k.n_cc)
+    off_y   = vi(k.off_y, n_ph + 1)
+    off_s   = vi(k.off_s, n_ph + 1)
+    off_N   = vi(k.off_N, n_ph + 1)
+    off_c   = vi(k.off_c, n_ph + 1)
+    s_all   = vd(k.s, Int(k.n_s))
+    Nb      = vd(k.Nb, Int(k.n_Nb))
+    ss_list = unsafe_string.(unsafe_wrap(Vector{Ptr{Cchar}}, gv.SS_list, gv.len_ss))
+    pp_list = unsafe_string.(unsafe_wrap(Vector{Ptr{Cchar}}, gv.PP_list, gv.len_pp))
+    ss_id   = vi(k.ss_id, n_ph) .+ 1
+    pp_id   = vi(k.pp_id, n_pp) .+ 1
+
+    s       = [s_all[off_s[q]+1:off_s[q+1]] for q in 1:n_ph]
+    N       = Matrix{Float64}[]
+    for q in 1:n_ph
+        nc  = off_s[q+1] - off_s[q]
+        kq  = off_y[q+1] - off_y[q]
+        push!(N, kq == 0 ? zeros(nc, 0) : permutedims(reshape(Nb[off_N[q]+1:off_N[q]+nc*kq], kq, nc)))
+    end
+    c_ph    = [q for q in 1:n_ph for c in off_c[q]+1:off_c[q+1]]
+
+    return (nz = nz, m = Int(k.m), n_y = Int(k.n_y), n_cc = n_cc, n_ph = n_ph, n_pp = n_pp,
+            ox_id = vi(k.ox_id, Int(k.m)) .+ 1, off_y = off_y, off_c = off_c,
+            ss_id = ss_id, ss_name = ss_list[ss_id], cp_id = vi(k.cp_id, n_ph) .+ 1,
+            pp_id = pp_id, pp_name = pp_list[pp_id], drop = vi(k.drop, n_ph + n_pp) .== 1,
+            s = s, N = N, c_ph = c_ph, c_x = vi(k.c_x, n_cc) .+ 1, c_b = vd(k.c_b, n_cc),
+            Gamma = vd(k.gam, Int(gv.len_ox)), n = vd(k.n, n_ph + n_pp), mu = vd(k.mu, n_cc), G = k.G,
+            R = vd(k.R, nz), J = reshape(vd(k.J, nz*nz), nz, nz))
 end
 
 

@@ -147,6 +147,26 @@ int MAGEMin_SetFinalNewtonStep(	MAGEMin_Handle *h,
 	return 0;
 }
 
+int MAGEMin_SetStoreKKT(		MAGEMin_Handle *h,
+								int             fn_store_kkt		){
+
+	if (h == NULL || fn_store_kkt < 0 || fn_store_kkt > 1){
+		printf(" MAGEMin_SetStoreKKT error: fn_store_kkt must be 0 or 1\n");
+		return -1;
+	}
+
+	h->gv.fn_store_kkt = fn_store_kkt;
+	return 0;
+}
+
+const fn_kkt *MAGEMin_GetFinalNewtonSystem(	MAGEMin_Handle *h			){
+
+	if (h == NULL || h->gv.fn_sys == NULL || h->gv.fn_sys->stored != 1){
+		return NULL;
+	}
+	return h->gv.fn_sys;
+}
+
 int MAGEMin_SetBuffer(			MAGEMin_Handle *h,
 								const char     *buffer,
 								double          buffer_n		){

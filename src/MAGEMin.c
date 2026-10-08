@@ -848,6 +848,109 @@ static void warn_ds62_placeholder_phases(	global_variable 	 gv,
 	return gv;
 }
 
+	global_variable ComputeEquilibrium_FromState(	bulk_info 	 		 z_b,
+													global_variable 	 gv,
+													PP_ref  			*PP_ref_db,
+													SS_ref  			*SS_ref_db,
+													csd_phase_set  		*cp,
+													int 				 n_ss,
+													int 				*ss_ids,
+													double 				*ss_x,
+													double 				*ss_n,
+													int 				 n_pp,
+													int 				*pp_ids,
+													double 				*pp_n,
+													double 				*gam				){
+
+	PC_type 								PC_read[gv.len_ss];
+
+	if (strcmp(gv.research_group, "tc") 	== 0 ){
+		TC_PC_init(	                    		PC_read,
+												gv								);
+	}
+	else if (strcmp(gv.research_group, "sb") 	== 0 ){
+		SB_PC_init(	                    		PC_read,
+												gv								);
+	}
+	else{
+		gv.status = -1;
+		return gv;
+	}
+
+	gv.fn_from_state = 1;
+	gv.status 		 = 0;
+	gv.div 			 = 0;
+	for (int j = 0; j < gv.len_ox; j++){
+		gv.gam_tot[j] 	= gam[j];
+		gv.gam_tot_0[j] = gam[j];
+	}
+
+	int off = 0;
+	for (int q = 0; q < n_ss && q < gv.max_n_cp; q++){
+		int ph_id = ss_ids[q];
+
+		for (int k = 0; k < SS_ref_db[ph_id].n_xeos; k++){
+			SS_ref_db[ph_id].iguess[k] = ss_x[off + k];
+		}
+		off += SS_ref_db[ph_id].n_xeos;
+
+		SS_ref_db[ph_id] = rotate_hyperplane(			gv,
+														SS_ref_db[ph_id]				);
+		SS_ref_db[ph_id] = PC_function(					gv,
+														PC_read,
+														SS_ref_db[ph_id],
+														z_b,
+														ph_id							);
+		SS_ref_db[ph_id] = SS_UPDATE_function(			gv,
+														SS_ref_db[ph_id],
+														z_b,
+														gv.SS_list[ph_id]				);
+
+		strcpy(cp[q].name,gv.SS_list[ph_id]);
+		cp[q].split 		= 0;
+		cp[q].id 			= ph_id;
+		cp[q].n_xeos		= SS_ref_db[ph_id].n_xeos;
+		cp[q].n_em			= SS_ref_db[ph_id].n_em;
+		cp[q].n_sf			= SS_ref_db[ph_id].n_sf;
+		cp[q].ss_flags[0] 	= 1;
+		cp[q].ss_flags[1] 	= 1;
+		cp[q].ss_flags[2] 	= 0;
+		for (int k = 0; k < SS_ref_db[ph_id].n_xeos; k++){
+			cp[q].xeos[k]   = SS_ref_db[ph_id].iguess[k];
+			cp[q].dguess[k] = SS_ref_db[ph_id].iguess[k];
+		}
+		copy_to_cp(										q,
+														ph_id,
+														gv,
+														SS_ref_db,
+														cp								);
+		cp[q].ss_n 			= ss_n[q];
+
+		gv.n_solvi[ph_id]  += 1;
+		gv.len_cp 		   += 1;
+		gv.n_cp_phase 	   += 1;
+		gv.n_phase 		   += 1;
+	}
+
+	for (int q = 0; q < n_pp; q++){
+		gv.pp_flags[pp_ids[q]][1] 	= 1;
+		gv.pp_flags[pp_ids[q]][2] 	= 0;
+		gv.pp_n[pp_ids[q]] 			= pp_n[q];
+		gv.n_pp_phase 			   += 1;
+		gv.n_phase 				   += 1;
+	}
+
+	gv = final_Newton(								z_b,
+													gv,
+													PC_read,
+													PP_ref_db,
+													SS_ref_db,
+													cp								);
+	if (gv.fn_status <= 0){ gv.status = -1; }
+
+	return gv;
+}
+
 
 /** 
   	Get command line options
@@ -1604,6 +1707,7 @@ void FreeDatabases(		global_variable gv,
 	free(gv.fn_A);
 	free(gv.fn_b);
 	free(gv.fn_ipiv);
+	fn_kkt_free(gv.fn_sys);
 	free(gv.A0_PGE);
 	free(gv.b_PGE);
 	free(gv.cp_id);
