@@ -13008,6 +13008,15 @@ void dpdx_mpe_g(void *SS_ref_db, const double *x){
 /**
     Update dpdx matrix of ep_mp
 */
+void dpdx_mpe_scp(void *SS_ref_db, const double *x){
+    SS_ref *d  = (SS_ref *) SS_ref_db;
+    double **dp_dx = d->dp_dx;
+
+    dp_dx[0][0] = -1.0;      dp_dx[0][1] = -2.0/3.0;      
+    dp_dx[1][0] = 1.0;      dp_dx[1][1] = -1.0/3.0;      
+    dp_dx[2][0] = 0.0;      dp_dx[2][1] = 1.0;      
+}
+
 void dpdx_mpe_ep(void *SS_ref_db, const double *x){
     SS_ref *d  = (SS_ref *) SS_ref_db;
     double **dp_dx = d->dp_dx;
@@ -13384,6 +13393,22 @@ void p2x_mpe_ctd(void *SS_ref_db, double eps){
 /**
     Endmember to xeos for ep_mp
 */
+void p2x_mpe_scp(void *SS_ref_db, double eps){
+    SS_ref *d  = (SS_ref *) SS_ref_db;
+    
+    d->iguess[1]   =  d->p[2];
+    d->iguess[0]   =  d->p[1] + d->iguess[1]/3.0;
+    
+    for (int i = 0; i < d->n_xeos; i++){
+        if (d->iguess[i] < d->bounds[i][0]){
+            d->iguess[i] = d->bounds[i][0];
+        }
+        if (d->iguess[i] > d->bounds[i][1]){
+            d->iguess[i] = d->bounds[i][1];
+        }
+    }
+}
+
 void p2x_mpe_ep(void *SS_ref_db, double eps){
     SS_ref *d  = (SS_ref *) SS_ref_db;
     
@@ -13931,6 +13956,14 @@ void px_mpe_g(void *SS_ref_db, const double *x){
 /**
     Endmember fraction of ep_mp
 */
+void px_mpe_scp(void *SS_ref_db, const double *x){
+    SS_ref *d  = (SS_ref *) SS_ref_db;
+    double *p = d->p;
+        p[0]           = 1.0 - x[0] - 2.0/3.0*x[1];
+        p[1]           = x[0] - x[1]/3.0;
+        p[2]           = x[1];
+}
+
 void px_mpe_ep(void *SS_ref_db, const double *x){
     SS_ref *d  = (SS_ref *) SS_ref_db;
     double *p = d->p;
@@ -14580,6 +14613,62 @@ double obj_mpe_g(unsigned n, const double *x, double *grad, void *SS_ref_db){
 /**
     Objective function of ep_mp
 */
+double obj_mpe_scp(unsigned n, const double *x, double *grad, void *SS_ref_db){
+    SS_ref *d         = (SS_ref *) SS_ref_db;
+
+    int n_em          = d->n_em;
+    double P          = d->P;
+    double T          = d->T;
+    double R          = d->R;
+
+    double *gb        = d->gb_lvl;
+    double *mu_Gex    = d->mu_Gex;
+    double *sf        = d->sf;
+    double *mu        = d->mu;
+    double *d_em      = d->d_em;
+    px_mpe_scp(SS_ref_db,x);
+
+    mu_Gex_sym_n2(d, mu_Gex);
+
+    sf[0]          = 0.75*x[0];
+    sf[1]          = 1.0 - 0.75*x[0];
+    sf[2]          = 1.0 - x[0] - 2.0/3.0*x[1];
+    sf[3]          = x[0] + 2.0/3.0*x[1];
+    sf[4]          = 1.0 - x[0] + x[1]/3.0;
+    sf[5]          = x[0] - x[1]/3.0;
+
+    mu[0]          = R*T*rlog(pow(sf[1], 4.0)*sf[2]*sf[4]*sf[4]) + gb[0] + mu_Gex[0];
+    mu[1]          = R*T*rlog(256.0/27.0*pow(sf[0], 3.0)*sf[1]*sf[3]*sf[5]*sf[5] + d_em[1]) + gb[1] + mu_Gex[1];
+    mu[2]          = R*T*rlog(256.0/27.0*sf[0]*pow(sf[1], 3.0)*sf[3]*sf[4]*sf[4] + d_em[2]) + gb[2] + mu_Gex[2];
+
+    d->sum_apep = 0.0;
+    for (int i = 0; i < n_em; i++){
+        d->sum_apep += d->ape[i]*d->p[i];
+    }
+    d->factor = d->fbc/d->sum_apep;
+
+    d->df_raw = 0.0;
+    for (int i = 0; i < n_em; i++){
+        d->df_raw += mu[i]*d->p[i];
+    }
+    d->df = d->df_raw * d->factor;
+
+    if (grad){
+        double *dfx    = d->dfx;
+        double **dp_dx = d->dp_dx;
+        dpdx_mpe_scp(SS_ref_db,x);
+        for (int i = 0; i < (d->n_xeos); i++){
+            dfx[i] = 0.0;
+            for (int j = 0; j < n_em; j++){
+                dfx[i] += (mu[j] - (d->ape[j]/d->sum_apep)*d->df_raw)*d->factor*dp_dx[j][i];
+            }
+            grad[i] = creal(dfx[i]);
+        }
+    }
+
+    return d->df;
+}
+
 double obj_mpe_ep(unsigned n, const double *x, double *grad, void *SS_ref_db){
     SS_ref *d         = (SS_ref *) SS_ref_db;
 
@@ -16429,6 +16518,8 @@ void TC_mpe_P2X_init(	            P2X_type 			*P2X_read,
 			P2X_read[iss]  = p2x_mpe_fsp; 		}
 		else if (strcmp( gv.SS_list[iss], "plc") == 0){
 			P2X_read[iss]  = p2x_mpe_plc; 		}
+		else if (strcmp( gv.SS_list[iss], "scp") == 0){
+			P2X_read[iss]  = p2x_mpe_scp; 		}
 		else if (strcmp( gv.SS_list[iss], "bi")    == 0){
 			P2X_read[iss]  = p2x_mpe_bi; 		}
 		else if (strcmp( gv.SS_list[iss], "g")     == 0){
@@ -16967,6 +17058,8 @@ void TC_all_P2X_init(	            P2X_type 			*P2X_read,
 			P2X_read[iss]  = p2x_mpe_carp; 		}
 		else if (strcmp( gv.SS_list[iss], "plc_B05")   == 0){
 			P2X_read[iss]  = p2x_mpe_plc; 		}
+		else if (strcmp( gv.SS_list[iss], "scp_K04")   == 0){
+			P2X_read[iss]  = p2x_mpe_scp; 		}
 		else{
 			printf("\nsolid solution '%s' is not in the database, cannot be initiated\n", gv.SS_list[iss]);
 		}
@@ -17427,6 +17520,8 @@ void TC_mpe_objective_init_function(	obj_type 			*SS_objective,
 			SS_objective[iss]  = obj_mpe_fsp; 		}
 		else if (strcmp( gv.SS_list[iss], "plc") == 0){
 			SS_objective[iss]  = obj_mpe_plc; 		}
+		else if (strcmp( gv.SS_list[iss], "scp") == 0){
+			SS_objective[iss]  = obj_mpe_scp; 		}
 		else if (strcmp( gv.SS_list[iss], "bi")    == 0){
 			SS_objective[iss]  = obj_mpe_bi; 		}
 		else if (strcmp( gv.SS_list[iss], "g")     == 0){
@@ -17631,6 +17726,8 @@ void TC_all_objective_init_function(	obj_type 			*SS_objective,
 			SS_objective[iss]  = obj_mpe_carp; 		}
 		else if (strcmp( gv.SS_list[iss], "plc_B05")   == 0){
 			SS_objective[iss]  = obj_mpe_plc; 		}
+		else if (strcmp( gv.SS_list[iss], "scp_K04")   == 0){
+			SS_objective[iss]  = obj_mpe_scp; 		}
 		else{
 			printf("\nsolid solution '%s' is not in the database, cannot be initiated\n", gv.SS_list[iss]);
 		}
@@ -18081,6 +18178,8 @@ void TC_mpe_PC_init(	                PC_type 			*PC_read,
 			PC_read[iss]  = obj_mpe_fsp; 		        }
 		else if (strcmp( gv.SS_list[iss], "plc") == 0){
 			PC_read[iss]  = obj_mpe_plc; 		        }
+		else if (strcmp( gv.SS_list[iss], "scp") == 0){
+			PC_read[iss]  = obj_mpe_scp; 		        }
 		else if (strcmp( gv.SS_list[iss], "bi")    == 0){
 			PC_read[iss]  = obj_mpe_bi; 		            }
 		else if (strcmp( gv.SS_list[iss], "g")     == 0){
@@ -18285,6 +18384,8 @@ void TC_all_PC_init(	                PC_type 			*PC_read,
 			PC_read[iss]  = obj_mpe_carp; 		}
 		else if (strcmp( gv.SS_list[iss], "plc_B05")   == 0){
 			PC_read[iss]  = obj_mpe_plc; 		}
+		else if (strcmp( gv.SS_list[iss], "scp_K04")   == 0){
+			PC_read[iss]  = obj_mpe_scp; 		}
 		else{
 			printf("\nsolid solution '%s' is not in the database, cannot be initiated\n", gv.SS_list[iss]);
 		}

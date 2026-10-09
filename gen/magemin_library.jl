@@ -1923,10 +1923,10 @@ mutable struct all_datasets
     n_ss::Cint
     ox::NTuple{14, NTuple{20, Cchar}}
     PP::NTuple{36, NTuple{20, Cchar}}
-    SS::NTuple{61, NTuple{20, Cchar}}
-    verifyPC::NTuple{61, Cint}
-    n_SS_PC::NTuple{61, Cint}
-    SS_PC_stp::NTuple{61, Cdouble}
+    SS::NTuple{63, NTuple{20, Cchar}}
+    verifyPC::NTuple{63, Cint}
+    n_SS_PC::NTuple{63, Cint}
+    SS_PC_stp::NTuple{63, Cdouble}
     PC_df_add::Cdouble
     solver_switch_T::Cdouble
     min_melt_T::Cdouble
@@ -2515,6 +2515,10 @@ function obj_ig_liq(n, x, grad, SS_ref_db)
     ccall((:obj_ig_liq, libMAGEMin), Cdouble, (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid}), n, x, grad, SS_ref_db)
 end
 
+function obj_igmn_liq(n, x, grad, SS_ref_db)
+    ccall((:obj_igmn_liq, libMAGEMin), Cdouble, (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid}), n, x, grad, SS_ref_db)
+end
+
 function obj_ig_mu(n, x, grad, SS_ref_db)
     ccall((:obj_ig_mu, libMAGEMin), Cdouble, (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid}), n, x, grad, SS_ref_db)
 end
@@ -2817,6 +2821,10 @@ end
 
 function obj_mpe_plc(n, x, grad, SS_ref_db)
     ccall((:obj_mpe_plc, libMAGEMin), Cdouble, (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid}), n, x, grad, SS_ref_db)
+end
+
+function obj_mpe_scp(n, x, grad, SS_ref_db)
+    ccall((:obj_mpe_scp, libMAGEMin), Cdouble, (Cuint, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cvoid}), n, x, grad, SS_ref_db)
 end
 
 function obj_mpe_bi(n, x, grad, SS_ref_db)

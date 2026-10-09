@@ -11386,6 +11386,32 @@ void g_mpe_c(unsigned m, double *result, unsigned n, const double *x, double *gr
 /**
     Inequality constraints for ep_mp
 */
+void scp_mpe_c(unsigned m, double *result, unsigned n, const double *x, double *grad, void *data){
+    result[0] = ( -0.75*x[0]);
+    result[1] = ( 0.75*x[0] - 1.0);
+    result[2] = ( x[0] + 2.0/3.0*x[1] - 1.0);
+    result[3] = ( -x[0] - 2.0/3.0*x[1]);
+    result[4] = ( x[0] - x[1]/3.0 - 1.0);
+    result[5] = ( -x[0] + x[1]/3.0);
+
+    if (grad) {
+        grad[0]  = -0.75;
+        grad[1]  = 0.0;
+        grad[2]  = 0.75;
+        grad[3]  = 0.0;
+        grad[4]  = 1.0;
+        grad[5]  = 2.0/3.0;
+        grad[6]  = -1.0;
+        grad[7]  = -2.0/3.0;
+        grad[8]  = 1.0;
+        grad[9]  = -1.0/3.0;
+        grad[10] = -1.0;
+        grad[11] = 1.0/3.0;
+    }
+
+    return;
+};
+
 void ep_mpe_c(unsigned m, double *result, unsigned n, const double *x, double *grad, void *data){
     result[0] = ( -x[0] + x[1]);
     result[1] = ( x[0] - x[1] - 1.0);
@@ -12593,6 +12619,41 @@ SS_ref NLopt_opt_mpe_g_function(global_variable gv, SS_ref SS_ref_db){
     return SS_ref_db;
 };
 
+SS_ref NLopt_opt_mpe_scp_function(global_variable gv, SS_ref SS_ref_db){
+    
+    int    n_em     = SS_ref_db.n_em;
+    unsigned int n  = SS_ref_db.n_xeos;
+    unsigned int m  = SS_ref_db.n_sf;
+    
+    double *x  = SS_ref_db.iguess; 
+    
+    for (int i = 0; i < (SS_ref_db.n_xeos); i++){
+       SS_ref_db.lb[i] = SS_ref_db.bounds[i][0];
+       SS_ref_db.ub[i] = SS_ref_db.bounds[i][1];
+    }
+    
+    SS_ref_db.opt = nlopt_create(NLOPT_LD_SLSQP, (n)); 
+    nlopt_set_lower_bounds(SS_ref_db.opt, SS_ref_db.lb);
+    nlopt_set_upper_bounds(SS_ref_db.opt, SS_ref_db.ub);
+    nlopt_set_min_objective(SS_ref_db.opt, obj_mpe_scp, &SS_ref_db);
+    nlopt_add_inequality_mconstraint(SS_ref_db.opt, m, scp_mpe_c, NULL, NULL);
+    nlopt_set_ftol_rel(SS_ref_db.opt, gv.obj_tol);
+    nlopt_set_maxeval(SS_ref_db.opt, gv.maxeval);
+
+    double minf;
+    SS_ref_db.status = nlopt_optimize(SS_ref_db.opt, x, &minf);
+
+    /* Send back needed local solution parameters */
+    for (int i = 0; i < SS_ref_db.n_xeos; i++){
+       SS_ref_db.xeos[i] = x[i];
+    }
+    
+    SS_ref_db.df   = minf;
+    nlopt_destroy(SS_ref_db.opt);
+    
+    return SS_ref_db;
+};
+
 SS_ref NLopt_opt_mpe_ep_function(global_variable gv, SS_ref SS_ref_db){
     
     int    n_em     = SS_ref_db.n_em;
@@ -13451,6 +13512,8 @@ void TC_mpe_NLopt_opt_init(	        NLopt_type 			*NLopt_opt,
 			NLopt_opt[iss]  = NLopt_opt_mpe_fsp_function; 		}
 		else if (strcmp( gv.SS_list[iss], "plc") == 0){
 			NLopt_opt[iss]  = NLopt_opt_mpe_plc_function; 		}
+		else if (strcmp( gv.SS_list[iss], "scp") == 0){
+			NLopt_opt[iss]  = NLopt_opt_mpe_scp_function; 		}
 		else if (strcmp( gv.SS_list[iss], "bi")    == 0){
 			NLopt_opt[iss]  = NLopt_opt_mpe_bi_function; 		}
 		else if (strcmp( gv.SS_list[iss], "g")     == 0){
@@ -13656,6 +13719,8 @@ void TC_all_NLopt_opt_init(	        NLopt_type 			*NLopt_opt,
 			NLopt_opt[iss]  = NLopt_opt_mpe_carp_function; 		}
 		else if (strcmp( gv.SS_list[iss], "plc_B05")   == 0){
 			NLopt_opt[iss]  = NLopt_opt_mpe_plc_function; 		}
+		else if (strcmp( gv.SS_list[iss], "scp_K04")   == 0){
+			NLopt_opt[iss]  = NLopt_opt_mpe_scp_function; 		}
 		else{
 			printf("\nsolid solution '%s' is not in the database, cannot be initiated\n", gv.SS_list[iss]);
 		}

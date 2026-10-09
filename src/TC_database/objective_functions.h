@@ -169,6 +169,7 @@ double obj_mtl_hpx(unsigned 	n, const double *x, double *grad, void *SS_ref_db);
 double obj_mpe_liq(unsigned   n, const double *x, double *grad, void *SS_ref_db);
 double obj_mpe_fsp(unsigned   n, const double *x, double *grad, void *SS_ref_db);
 double obj_mpe_plc(unsigned   n, const double *x, double *grad, void *SS_ref_db);
+double obj_mpe_scp(unsigned   n, const double *x, double *grad, void *SS_ref_db);
 double obj_mpe_bi(unsigned  	 n, const double *x, double *grad, void *SS_ref_db);
 double obj_mpe_g(unsigned   	 n, const double *x, double *grad, void *SS_ref_db);
 double obj_mpe_ep(unsigned    n, const double *x, double *grad, void *SS_ref_db);
