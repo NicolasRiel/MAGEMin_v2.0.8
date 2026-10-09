@@ -1399,7 +1399,7 @@ function remove_phases( list        :: Union{Nothing,Vector{String}},
                     idx = findfirst(db_inf.ss_name .== i)
                     rm_list = vcat(rm_list,idx);
                 else
-                    println(" \"$phase_type\" is not a proper phase type, and thus cannot be deactivated")
+                    println(" \"$i\" is not a proper phase type, and thus cannot be deactivated")
                 end
             end
         end

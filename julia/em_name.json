@@ -354,6 +354,7 @@
 "mhst": ["mhst", "", [6, 1, 2, 4, 1, 0, 0.5, 0, 0.5, 0, 0, 1, 0, 0, 0]],
 "mmbi": ["mmbi", "Mn-Mg biotite component", [3, 0.5, 0, 0, 0, 0.5, 0, 0, 0, 3, 0, 1, 0, 0, 0]],
 "mmchl": ["mmchl", "Mn-Mg chlorite component", [3, 1, 0, 0, 0, 0, 0, 0, 0, 5, 0, 4, 0, 0, 0]],
+"mn2L": ["mn2L", "", [2, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0]],
 "mnal": ["mnal", "Mg-Na-Al phase component", [1, 2.5, 0, 2, 0, 0, 0.5, 0, 0, 0, 0, 0, 0, 0, 0]],
 "mncd": ["mncd", "Mn-cordierite component", [5, 2, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0]],
 "mnct": ["mnct", "Mn-chloritoid component", [1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0]],

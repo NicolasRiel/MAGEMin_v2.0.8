@@ -4015,6 +4015,10 @@ function LM_convert_function(gv, SS_ref_db, z_b, ph_id, gamma, n_gamma, xeos, n_
     ccall((:LM_convert_function, libMAGEMin), SS_ref, (global_variable, SS_ref, bulk_info, Cint, Ptr{Cdouble}, Cint, Ptr{Cdouble}, Cint), gv, SS_ref_db, z_b, ph_id, gamma, n_gamma, xeos, n_xeos)
 end
 
+function ss_local_min(gv, NLopt_opt, ph_id, SS_ref_db, box_size)
+    ccall((:ss_local_min, libMAGEMin), SS_ref, (global_variable, Ptr{Ptr{Cvoid}}, Cint, SS_ref, Cdouble), gv, NLopt_opt, ph_id, SS_ref_db, box_size)
+end
+
 function CP_UPDATE_function(gv, SS_ref_db, cp, z_b)
     ccall((:CP_UPDATE_function, libMAGEMin), csd_phase_set, (global_variable, SS_ref, csd_phase_set, bulk_info), gv, SS_ref_db, cp, z_b)
 end

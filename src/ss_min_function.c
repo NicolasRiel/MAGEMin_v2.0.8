@@ -671,7 +671,7 @@ static void add_linear_pc(			global_variable 	 gv,
 	}
 }
 
-static SS_ref ss_local_min(		global_variable 	 gv,
+SS_ref ss_local_min(			global_variable 	 gv,
 								NLopt_type 			*NLopt_opt,
 								int 				 ph_id,
 								SS_ref 				 SS_ref_db,

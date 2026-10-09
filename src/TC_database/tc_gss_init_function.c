@@ -1044,6 +1044,21 @@ SS_ref G_SS_ig_liq_init_function(SS_ref SS_ref_db,  global_variable gv){
     return SS_ref_db;
 }
 
+SS_ref G_SS_igmn_liq_init_function(SS_ref SS_ref_db,  global_variable gv){
+    
+    SS_ref_db.n_cat     = 0;
+    SS_ref_db.is_liq    = 1;
+    SS_ref_db.override  = 0;
+    SS_ref_db.symmetry  = 0;
+    SS_ref_db.n_sf      = 19;
+    SS_ref_db.n_em      = 13;
+    SS_ref_db.n_v       = 13;
+    SS_ref_db.n_w       = 78;
+    SS_ref_db.n_xeos    = 12;
+    
+    return SS_ref_db;
+}
+
 /** 
   allocate memory for muscovite
 */
@@ -2821,6 +2836,8 @@ void TC_SS_init_all(	            SS_init_type 		*SS_init,
 			SS_init[iss]  = G_SS_mpe_liq_init_function; 		}
 		else if (strcmp( gv.SS_list[iss], "liq_G25w") == 0 ){
 			SS_init[iss]  = G_SS_ig_liq_init_function; 		}
+		else if (strcmp( gv.SS_list[iss], "liqmn_R27") == 0 ){
+			SS_init[iss]  = G_SS_igmn_liq_init_function; 		}
 
 		/* fsp (2 citation variants) */
 		else if (strcmp( gv.SS_list[iss], "fsp_H22")   == 0 ){

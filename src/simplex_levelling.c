@@ -1355,6 +1355,8 @@ void SS_all_pc_init_function(	PC_ref 	*SS_pc_xeos,
 		SS_mpe_pc_init_function(		SS_pc_xeos, iss, "liq", gv		);	}
 	else if (strcmp( name, "liq_G25w") == 0 ){
 		SS_ig_pc_init_function(		SS_pc_xeos, iss, "liq", gv		);	}
+	else if (strcmp( name, "liqmn_R27") == 0 ){
+		SS_ig_pc_init_function(		SS_pc_xeos, iss, "liqmn", gv		);	}
 
 	/* fsp (2 citation variants) */
 	else if (strcmp( name, "fsp_H22")   == 0 ){

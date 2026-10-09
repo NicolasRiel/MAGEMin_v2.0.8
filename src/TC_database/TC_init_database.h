@@ -356,11 +356,11 @@
 		int 	n_ss;
 		char    ox[14][20];
 		char    PP[36][20];
-		char    SS[61][20];
+		char    SS[62][20];
 
-		int 	verifyPC[61];
-		int 	n_SS_PC[61];
-		double 	SS_PC_stp[61];
+		int 	verifyPC[62];
+		int 	n_SS_PC[62];
+		double 	SS_PC_stp[62];
 
 		double 	PC_df_add;					/** min value of df under which the PC is added 									*/
 		double  solver_switch_T;

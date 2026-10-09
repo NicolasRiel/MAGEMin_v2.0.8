@@ -85,6 +85,7 @@ double obj_ig_g(unsigned    n, const double *x, double *grad, void *SS_ref_db);
 double obj_ig_amp(unsigned   n, const double *x, double *grad, void *SS_ref_db);
 double obj_ig_ilm(unsigned  n, const double *x, double *grad, void *SS_ref_db);
 double obj_ig_liq(unsigned  n, const double *x, double *grad, void *SS_ref_db);
+double obj_igmn_liq(unsigned  n, const double *x, double *grad, void *SS_ref_db);
 double obj_ig_mu(unsigned   n, const double *x, double *grad, void *SS_ref_db);
 double obj_ig_ol(unsigned   n, const double *x, double *grad, void *SS_ref_db);
 double obj_ig_opx(unsigned  n, const double *x, double *grad, void *SS_ref_db);

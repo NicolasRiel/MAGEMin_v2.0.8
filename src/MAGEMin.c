@@ -425,7 +425,7 @@ static atomic_int ds62_placeholder_warned = 0;
 static void warn_ds62_placeholder_phases(	global_variable 	 gv,
 											SS_ref  			*SS_ref_db		){
 
-	static const char *ds62_placeholder_ss[] = {"liq_S26", "liq_G25w", "fl_G25"};
+	static const char *ds62_placeholder_ss[] = {"liq_S26", "liq_G25w", "liqmn_R27", "fl_G25"};
 	const int n_placeholder = sizeof(ds62_placeholder_ss) / sizeof(ds62_placeholder_ss[0]);
 
 	if (gv.verbose == -1 || gv.EM_database != 8 || gv.EM_dataset != 62 || strcmp(gv.research_group, "tc") != 0){
@@ -677,7 +677,7 @@ static void warn_ds62_placeholder_phases(	global_variable 	 gv,
 				gv.n_ss_array[cp[i].id] += 1;
 				if (strcmp( gv.SS_list[cp[i].id], "liq")  == 0
 				 || strcmp( gv.SS_list[cp[i].id], "liq_W14") == 0 || strcmp( gv.SS_list[cp[i].id], "liq_G16") == 0
-				 || strcmp( gv.SS_list[cp[i].id], "liq_G25w") == 0 || strcmp( gv.SS_list[cp[i].id], "liq_S26") == 0){
+				 || strcmp( gv.SS_list[cp[i].id], "liq_G25w") == 0 || strcmp( gv.SS_list[cp[i].id], "liqmn_R27") == 0 || strcmp( gv.SS_list[cp[i].id], "liq_S26") == 0){
 					ig_liq += cp[i].ss_n;
 					n_liq  += 1;
 				}

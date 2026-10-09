@@ -586,6 +586,10 @@ void calibration_output_struct(		global_variable 	 gv,
 		BR_PC_init(							PC_read,		gv	);
 	}
 
+	gv.ns_tol    = fmin(gv.ns_tol,    1e-12);
+	gv.ns_tol_pg = fmin(gv.ns_tol_pg, 1e-9);
+	int ns_only  = (gv.ss_solver == 1 && gv.solver == 0);
+
 	int m = sp[0].n_mSS;		/* continue directly from wherever mSS_output_struct left off */
 
 	for (int i = 0; i < gv.len_ss; i++){
@@ -615,20 +619,26 @@ void calibration_output_struct(		global_variable 	 gv,
 			SS_ref_db[i] = rotate_hyperplane(				gv,
 															SS_ref_db[i]			);
 
-			SS_ref_db[i] = restrict_SS_HyperVolume(		gv,
+			SS_ref_db[i] = ss_local_min(					gv,
+															NLopt_opt,
+															i,
 															SS_ref_db[i],
 															gv.box_size_mode_PGE	);
 
-			SS_ref_db[i] = (*NLopt_opt[i])(				gv,
-															SS_ref_db[i]			);
-
-			if (SS_ref_db[i].sf_ok != 1){ continue; }
+			if (ns_only && SS_ref_db[i].ns_ok == 1 && SS_ref_db[i].ns_absent == 1 && SS_ref_db[i].ns_status != 3){ continue; }
 
 			SS_ref_db[i] = PC_function(					gv,
 															PC_read,
 															SS_ref_db[i],
 															z_b,
 															i						);
+
+			SS_ref_db[i] = SS_UPDATE_function(			gv,
+															SS_ref_db[i],
+															z_b,
+															gv.SS_list[i]			);
+
+			if (SS_ref_db[i].sf_ok != 1){ continue; }
 
 			if (best_found == 0 || SS_ref_db[i].df < best_df){
 				best_found = 1;
@@ -939,9 +949,9 @@ void fill_output_struct(		global_variable 	 gv,
 			}
 
 			if (strcmp( cp[i].name, "liq") == 0 || strcmp( cp[i].name, "fl") == 0 || strcmp( cp[i].name, "DEW") == 0
-			 || strcmp( cp[i].name, "liq_W14") == 0 || strcmp( cp[i].name, "liq_G16") == 0 || strcmp( cp[i].name, "liq_G25w") == 0 || strcmp( cp[i].name, "liq_S26") == 0
+			 || strcmp( cp[i].name, "liq_W14") == 0 || strcmp( cp[i].name, "liq_G16") == 0 || strcmp( cp[i].name, "liq_G25w") == 0 || strcmp( cp[i].name, "liqmn_R27") == 0 || strcmp( cp[i].name, "liq_S26") == 0
 			 || strcmp( cp[i].name, "fl_G25") == 0 || strcmp( cp[i].name, "fl_EF21") == 0 || strcmp( cp[i].name, "fl_H03") == 0 || strcmp( cp[i].name, "DEW_S24") == 0){
-				if (strcmp( cp[i].name, "liq") == 0 || strcmp( cp[i].name, "liq_W14") == 0 || strcmp( cp[i].name, "liq_G16") == 0 || strcmp( cp[i].name, "liq_G25w") == 0 || strcmp( cp[i].name, "liq_S26") == 0){
+				if (strcmp( cp[i].name, "liq") == 0 || strcmp( cp[i].name, "liq_W14") == 0 || strcmp( cp[i].name, "liq_G16") == 0 || strcmp( cp[i].name, "liq_G25w") == 0 || strcmp( cp[i].name, "liqmn_R27") == 0 || strcmp( cp[i].name, "liq_S26") == 0){
 					if (gv.n_phase == 1){
 						sp[0].entropy_M 			= cp[i].phase_entropy;
 						sp[0].frac_M 				= 1.0;
@@ -1097,9 +1107,9 @@ void fill_output_struct(		global_variable 	 gv,
 			sp[0].ph_frac_vol[n] = sp[0].ph_frac_wt[n] / sp[0].SS[n].rho;
 
 			if (strcmp( cp[i].name, "liq") == 0 || strcmp( cp[i].name, "fl") == 0 || strcmp( cp[i].name, "DEW") == 0
-			 || strcmp( cp[i].name, "liq_W14") == 0 || strcmp( cp[i].name, "liq_G16") == 0 || strcmp( cp[i].name, "liq_G25w") == 0 || strcmp( cp[i].name, "liq_S26") == 0
+			 || strcmp( cp[i].name, "liq_W14") == 0 || strcmp( cp[i].name, "liq_G16") == 0 || strcmp( cp[i].name, "liq_G25w") == 0 || strcmp( cp[i].name, "liqmn_R27") == 0 || strcmp( cp[i].name, "liq_S26") == 0
 			 || strcmp( cp[i].name, "fl_G25") == 0 || strcmp( cp[i].name, "fl_EF21") == 0 || strcmp( cp[i].name, "fl_H03") == 0 || strcmp( cp[i].name, "DEW_S24") == 0){
-				if (strcmp( cp[i].name, "liq") == 0 || strcmp( cp[i].name, "liq_W14") == 0 || strcmp( cp[i].name, "liq_G16") == 0 || strcmp( cp[i].name, "liq_G25w") == 0 || strcmp( cp[i].name, "liq_S26") == 0){
+				if (strcmp( cp[i].name, "liq") == 0 || strcmp( cp[i].name, "liq_W14") == 0 || strcmp( cp[i].name, "liq_G16") == 0 || strcmp( cp[i].name, "liq_G25w") == 0 || strcmp( cp[i].name, "liqmn_R27") == 0 || strcmp( cp[i].name, "liq_S26") == 0){
 						sp[0].frac_M_vol      = sp[0].ph_frac_vol[n];
 				}
 				else{
